@@ -71,7 +71,7 @@
       g.add(new Konva.Rect({ width: item.rect.w, height: item.rect.h, fill: item.bgColor ?? "#333333", opacity: item.bgOpacity ?? 1 }));
       const fill = new Konva.Rect({ fill: item.style.color });
       g.add(fill);
-      g.add(new Konva.Rect({ width: item.rect.w, height: item.rect.h, stroke: item.style.color, strokeWidth: 1 }));
+      g.add(new Konva.Rect({ width: item.rect.w, height: item.rect.h, stroke: item.frameColor ?? item.style.color, strokeWidth: 1 }));
       const apply = (val: number) => {
         const f = valueToFraction(val, min, max);
         if (item.kind === "BarH") fill.setAttrs({ x: 0, y: 0, width: item.rect.w * f, height: item.rect.h });
@@ -81,7 +81,7 @@
     } else if (item.kind === "Gauge") {
       const [min, max] = item.range ?? [0, 100];
       const r = Math.min(item.rect.w, item.rect.h) / 2;
-      g.add(new Konva.Arc({ x: r, y: r, innerRadius: r * 0.7, outerRadius: r, angle: 270, rotation: 135, stroke: "#333", fill: item.bgColor ?? "#222222", opacity: item.bgOpacity ?? 1 }));
+      g.add(new Konva.Arc({ x: r, y: r, innerRadius: r * 0.7, outerRadius: r, angle: 270, rotation: 135, stroke: item.frameColor ?? "#333333", fill: item.bgColor ?? "#222222", opacity: item.bgOpacity ?? 1 }));
       const fillArc = new Konva.Arc({ x: r, y: r, innerRadius: r * 0.7, outerRadius: r, angle: 0, rotation: 135, fill: item.style.color });
       g.add(fillArc);
       // 中央は数値を出さず透過（リング内側は innerRadius=0.7r で空＝透過のまま）
@@ -90,7 +90,7 @@
     } else if (item.kind === "GraphLine") {
       // 時系列折れ線（ネットワーク速度などの履歴）。背景透過可・グリッド線+上中下の目盛りラベル。
       const w = item.rect.w, h = item.rect.h;
-      g.add(new Konva.Rect({ width: w, height: h, stroke: "#333", strokeWidth: 1, fill: item.bgColor ?? "#0d0d0d", opacity: item.bgOpacity ?? 0 }));
+      g.add(new Konva.Rect({ width: w, height: h, stroke: item.frameColor ?? "#333333", strokeWidth: 1, fill: item.bgColor ?? "#0d0d0d", opacity: item.bgOpacity ?? 0 }));
       // グリッド線（上/中/下）
       for (const gy of [0.5, h / 2, h - 0.5]) {
         g.add(new Konva.Line({ points: [0, gy, w, gy], stroke: "#3a3a3a", strokeWidth: 1, opacity: 0.7 }));
@@ -107,8 +107,10 @@
         const hist = item.sensorSrc ? (editor.history.get(item.sensorSrc) ?? []) : [];
         line.points(historyToPoints(hist, w, h, item.range));
         const [mn, mx] = graphScale(hist, item.range);
-        // 表示単位をスケール上限に追従（Kbps↔Mbps↔Gbps）
-        const { unit, factor } = autoRateUnit(item.unit ?? "", mx);
+        // 表示単位：自動ON ならスケール上限に追従(Kbps↔Mbps↔Gbps)、OFF なら入力単位を固定
+        const { unit, factor } = item.autoUnit === false
+          ? { unit: item.unit ?? "", factor: 1 }
+          : autoRateUnit(item.unit ?? "", mx);
         const suffix = unit ? ` ${unit}` : "";
         topLabel.text(fmt(mx * factor) + suffix);
         midLabel.text(fmt(((mn + mx) / 2) * factor) + suffix);

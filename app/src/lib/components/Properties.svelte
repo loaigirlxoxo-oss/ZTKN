@@ -51,11 +51,13 @@
     <label>format <input bind:value={item.format} oninput={changed} /></label>
     {#if item.kind === "GraphLine"}
       <label>単位 <input bind:value={item.unit} oninput={changed} placeholder="Mbps" /></label>
+      <label>単位を自動換算 <input type="checkbox" bind:checked={item.autoUnit} onchange={changed} /></label>
       <label>自動スケール <input type="checkbox" checked={!item.range} onchange={toggleAuto} /></label>
     {/if}
     {#if item.kind === "Gauge" || item.kind === "BarH" || item.kind === "BarV" || item.kind === "GraphLine"}
       <label>背景色 <input type="color" bind:value={item.bgColor} oninput={changed} /></label>
       <label>背景透過度 <input type="range" min="0" max="1" step="0.05" bind:value={item.bgOpacity} oninput={changed} /></label>
+      <label>枠色 <input type="color" bind:value={item.frameColor} oninput={changed} /></label>
     {/if}
     {#if item.range}
       <label>min <input type="number" bind:value={item.range[0]} oninput={changed} /></label>
