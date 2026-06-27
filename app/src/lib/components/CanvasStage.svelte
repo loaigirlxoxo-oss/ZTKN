@@ -71,7 +71,7 @@
       g.add(new Konva.Rect({ width: item.rect.w, height: item.rect.h, fill: item.bgColor ?? "#333333", opacity: item.bgOpacity ?? 1 }));
       const fill = new Konva.Rect({ fill: item.style.color });
       g.add(fill);
-      g.add(new Konva.Rect({ width: item.rect.w, height: item.rect.h, stroke: item.frameColor ?? item.style.color, strokeWidth: 1 }));
+      g.add(new Konva.Rect({ width: item.rect.w, height: item.rect.h, stroke: item.frameColor ?? item.style.color, strokeWidth: 1, opacity: item.frameOpacity ?? 1 }));
       const apply = (val: number) => {
         const f = valueToFraction(val, min, max);
         if (item.kind === "BarH") fill.setAttrs({ x: 0, y: 0, width: item.rect.w * f, height: item.rect.h });
@@ -81,16 +81,20 @@
     } else if (item.kind === "Gauge") {
       const [min, max] = item.range ?? [0, 100];
       const r = Math.min(item.rect.w, item.rect.h) / 2;
-      g.add(new Konva.Arc({ x: r, y: r, innerRadius: r * 0.7, outerRadius: r, angle: 270, rotation: 135, stroke: item.frameColor ?? "#333333", fill: item.bgColor ?? "#222222", opacity: item.bgOpacity ?? 1 }));
+      // 背景トラック（塗り）と枠（輪郭）を別ノードにして透過度を独立させる
+      g.add(new Konva.Arc({ x: r, y: r, innerRadius: r * 0.7, outerRadius: r, angle: 270, rotation: 135, fill: item.bgColor ?? "#222222", opacity: item.bgOpacity ?? 1 }));
       const fillArc = new Konva.Arc({ x: r, y: r, innerRadius: r * 0.7, outerRadius: r, angle: 0, rotation: 135, fill: item.style.color });
       g.add(fillArc);
+      g.add(new Konva.Arc({ x: r, y: r, innerRadius: r * 0.7, outerRadius: r, angle: 270, rotation: 135, stroke: item.frameColor ?? "#333333", strokeWidth: 1, opacity: item.frameOpacity ?? 1 }));
       // 中央は数値を出さず透過（リング内側は innerRadius=0.7r で空＝透過のまま）
       const apply = (val: number) => { fillArc.angle(valueToFraction(val, min, max) * 270); };
       apply(v); updaters.set(item.id, apply);
     } else if (item.kind === "GraphLine") {
       // 時系列折れ線（ネットワーク速度などの履歴）。背景透過可・グリッド線+上中下の目盛りラベル。
       const w = item.rect.w, h = item.rect.h;
-      g.add(new Konva.Rect({ width: w, height: h, stroke: item.frameColor ?? "#333333", strokeWidth: 1, fill: item.bgColor ?? "#0d0d0d", opacity: item.bgOpacity ?? 0 }));
+      // 背景と枠を別ノードにして透過度を独立させる
+      g.add(new Konva.Rect({ width: w, height: h, fill: item.bgColor ?? "#0d0d0d", opacity: item.bgOpacity ?? 0 }));
+      g.add(new Konva.Rect({ width: w, height: h, stroke: item.frameColor ?? "#333333", strokeWidth: 1, opacity: item.frameOpacity ?? 1 }));
       // グリッド線（上/中/下）
       for (const gy of [0.5, h / 2, h - 0.5]) {
         g.add(new Konva.Line({ points: [0, gy, w, gy], stroke: "#3a3a3a", strokeWidth: 1, opacity: 0.7 }));
