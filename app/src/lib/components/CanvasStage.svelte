@@ -6,7 +6,7 @@
   import { itemDisplayText } from "$lib/render/draw";
   import { formatValue, splitFormat } from "$lib/render/format";
   import { valueToFraction } from "$lib/render/gauge";
-  import { historyToPoints, graphScale } from "$lib/render/graph";
+  import { historyToPoints, graphScale, autoRateUnit } from "$lib/render/graph";
   import { snap } from "$lib/editor/snap";
 
   let container: HTMLDivElement;
@@ -67,9 +67,11 @@
       updaters.set(item.id, addValueUnit(g, item, v, item.rect.w, false, 0));
     } else if (item.kind === "BarH" || item.kind === "BarV") {
       const [min, max] = item.range ?? [0, 100];
-      g.add(new Konva.Rect({ width: item.rect.w, height: item.rect.h, stroke: item.style.color }));
+      // 背景トラック（全体opacityとは別に背景だけ透過可）
+      g.add(new Konva.Rect({ width: item.rect.w, height: item.rect.h, fill: item.bgColor ?? "#333333", opacity: item.bgOpacity ?? 1 }));
       const fill = new Konva.Rect({ fill: item.style.color });
       g.add(fill);
+      g.add(new Konva.Rect({ width: item.rect.w, height: item.rect.h, stroke: item.style.color, strokeWidth: 1 }));
       const apply = (val: number) => {
         const f = valueToFraction(val, min, max);
         if (item.kind === "BarH") fill.setAttrs({ x: 0, y: 0, width: item.rect.w * f, height: item.rect.h });
@@ -79,30 +81,38 @@
     } else if (item.kind === "Gauge") {
       const [min, max] = item.range ?? [0, 100];
       const r = Math.min(item.rect.w, item.rect.h) / 2;
-      g.add(new Konva.Arc({ x: r, y: r, innerRadius: r * 0.7, outerRadius: r, angle: 270, rotation: 135, stroke: "#333", fill: "#222" }));
+      g.add(new Konva.Arc({ x: r, y: r, innerRadius: r * 0.7, outerRadius: r, angle: 270, rotation: 135, stroke: "#333", fill: item.bgColor ?? "#222222", opacity: item.bgOpacity ?? 1 }));
       const fillArc = new Konva.Arc({ x: r, y: r, innerRadius: r * 0.7, outerRadius: r, angle: 0, rotation: 135, fill: item.style.color });
       g.add(fillArc);
       // 中央は数値を出さず透過（リング内側は innerRadius=0.7r で空＝透過のまま）
       const apply = (val: number) => { fillArc.angle(valueToFraction(val, min, max) * 270); };
       apply(v); updaters.set(item.id, apply);
     } else if (item.kind === "GraphLine") {
-      // 時系列折れ線（ネットワーク速度などの履歴）。背景は透過可・上下にスケール+単位を表示。
-      const bg = new Konva.Rect({ width: item.rect.w, height: item.rect.h, stroke: "#333", strokeWidth: 1, fill: item.bgColor ?? "#0d0d0d", opacity: item.bgOpacity ?? 0 });
-      g.add(bg);
+      // 時系列折れ線（ネットワーク速度などの履歴）。背景透過可・グリッド線+上中下の目盛りラベル。
+      const w = item.rect.w, h = item.rect.h;
+      g.add(new Konva.Rect({ width: w, height: h, stroke: "#333", strokeWidth: 1, fill: item.bgColor ?? "#0d0d0d", opacity: item.bgOpacity ?? 0 }));
+      // グリッド線（上/中/下）
+      for (const gy of [0.5, h / 2, h - 0.5]) {
+        g.add(new Konva.Line({ points: [0, gy, w, gy], stroke: "#3a3a3a", strokeWidth: 1, opacity: 0.7 }));
+      }
       const line = new Konva.Line({ points: [], stroke: item.style.color, strokeWidth: 1.5, lineJoin: "round", lineCap: "round" });
       g.add(line);
       const scaleFont = { fontFamily: item.style.fontFamily, fontSize: 11, fill: "#9aa" };
-      const maxLabel = new Konva.Text({ ...scaleFont, x: 3, y: 2, text: "" });
-      const minLabel = new Konva.Text({ ...scaleFont, x: 3, y: item.rect.h - 14, text: "" });
-      g.add(maxLabel); g.add(minLabel);
-      const unit = item.unit ? ` ${item.unit}` : "";
+      const topLabel = new Konva.Text({ ...scaleFont, x: 3, y: 2, text: "" });
+      const midLabel = new Konva.Text({ ...scaleFont, x: 3, y: h / 2 - 13, text: "" });
+      const botLabel = new Konva.Text({ ...scaleFont, x: 3, y: h - 14, text: "" });
+      g.add(topLabel); g.add(midLabel); g.add(botLabel);
       const fmt = (n: number) => (Math.abs(n) >= 100 ? String(Math.round(n)) : n.toFixed(1));
       const apply = () => {
         const hist = item.sensorSrc ? (editor.history.get(item.sensorSrc) ?? []) : [];
-        line.points(historyToPoints(hist, item.rect.w, item.rect.h, item.range));
+        line.points(historyToPoints(hist, w, h, item.range));
         const [mn, mx] = graphScale(hist, item.range);
-        maxLabel.text(fmt(mx) + unit);
-        minLabel.text(fmt(mn) + unit);
+        // 表示単位をスケール上限に追従（Kbps↔Mbps↔Gbps）
+        const { unit, factor } = autoRateUnit(item.unit ?? "", mx);
+        const suffix = unit ? ` ${unit}` : "";
+        topLabel.text(fmt(mx * factor) + suffix);
+        midLabel.text(fmt(((mn + mx) / 2) * factor) + suffix);
+        botLabel.text(fmt(mn * factor) + suffix);
       };
       apply();
       updaters.set(item.id, () => apply()); // 値は履歴から読むので引数は使わない

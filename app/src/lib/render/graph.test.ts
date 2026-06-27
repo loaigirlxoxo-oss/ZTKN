@@ -1,15 +1,40 @@
 import { describe, it, expect } from "vitest";
-import { historyToPoints, graphScale } from "./graph";
+import { historyToPoints, graphScale, niceScale, autoRateUnit } from "./graph";
+
+describe("autoRateUnit", () => {
+  it("keeps the unit when the value is already readable", () => {
+    expect(autoRateUnit("Mbps", 600)).toEqual({ unit: "Mbps", factor: 1 });
+  });
+  it("steps down to Kbps for small values", () => {
+    expect(autoRateUnit("Mbps", 0.4)).toEqual({ unit: "Kbps", factor: 1000 });
+  });
+  it("steps up to Gbps for large values", () => {
+    expect(autoRateUnit("Mbps", 5000)).toEqual({ unit: "Gbps", factor: 0.001 });
+  });
+  it("passes through non-rate units", () => {
+    expect(autoRateUnit("°C", 50)).toEqual({ unit: "°C", factor: 1 });
+  });
+});
+
+describe("niceScale", () => {
+  it("rounds bounds to nice numbers with a step", () => {
+    expect(niceScale(0, 9)).toEqual({ min: 0, max: 10, step: 2 });
+  });
+  it("handles equal min/max without zero span", () => {
+    const s = niceScale(5, 5);
+    expect(s.max).toBeGreaterThan(s.min);
+  });
+});
 
 describe("graphScale", () => {
   it("returns the fixed range when provided", () => {
     expect(graphScale([1, 2, 3], [0, 100])).toEqual([0, 100]);
   });
-  it("auto-scales to history min/max", () => {
-    expect(graphScale([3, 9, 5])).toEqual([3, 9]);
+  it("auto-scales non-negative data from 0 to a nice max", () => {
+    expect(graphScale([3, 9, 5])).toEqual([0, 10]);
   });
-  it("widens a flat history to avoid zero span", () => {
-    expect(graphScale([7, 7])).toEqual([6, 8]);
+  it("widens a flat history to a nice 0-based range", () => {
+    expect(graphScale([7, 7])).toEqual([0, 8]);
   });
   it("falls back to [0,1] for empty history", () => {
     expect(graphScale([])).toEqual([0, 1]);
