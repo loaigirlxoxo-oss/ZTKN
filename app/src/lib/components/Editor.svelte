@@ -3,6 +3,7 @@
   import CanvasStage from "./CanvasStage.svelte";
   import Properties from "./Properties.svelte";
   import { editor } from "$lib/editor/editorState.svelte";
+  import { sensors } from "$lib/sensors/live.svelte";
   import { savePanel, loadPanel } from "$lib/editor/persist";
 
   let msg = $state("");
@@ -33,6 +34,8 @@
   <span class="sep">|</span>
   <label class="size">レイアウト幅 <input type="number" min="100" bind:value={editor.panel.size.w} /></label>
   <label class="size">高さ <input type="number" min="100" bind:value={editor.panel.size.h} /></label>
+  <span class="sep">|</span>
+  <span class="sensor-status">🌡 {sensors.status}</span>
   <span class="msg">{msg}</span>
 </div>
 
@@ -48,6 +51,7 @@
   .sep { color: #444; }
   .size { color: #aaa; font-size: 12px; display: flex; align-items: center; gap: 4px; }
   .size input { width: 70px; background: #222; color: #ddd; border: 1px solid #3a3a3a; }
+  .sensor-status { color: #8ab; font-size: 12px; }
   .msg { color: #00ffcc; font-size: 12px; }
   .editor { display: flex; align-items: flex-start; height: calc(100vh - 41px); }
   .canvas-wrap { flex: 1; padding: 16px; overflow: auto; }

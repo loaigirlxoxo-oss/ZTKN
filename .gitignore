@@ -7,6 +7,12 @@ dist/
 **/target/
 app/src-tauri/gen/
 
+# .NET sidecar build artifacts（exe は dotnet publish で生成。下記スクリプト参照）
+tools/sensor-sidecar/bin/
+tools/sensor-sidecar/obj/
+tools/sensor-sidecar/publish/
+app/src-tauri/binaries/*.exe
+
 # Logs & OS
 *.log
 .DS_Store

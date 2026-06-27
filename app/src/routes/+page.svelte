@@ -2,22 +2,36 @@
   import { onMount } from "svelte";
   import Editor from "$lib/components/Editor.svelte";
   import { editor } from "$lib/editor/editorState.svelte";
-  import { startDummyLoop } from "$lib/sensors/loop";
-  import { createItem } from "$lib/model/panel";
+  import { sensors } from "$lib/sensors/live.svelte";
+  import { pickSensor } from "$lib/sensors/match";
+  import { createItem, type PanelItem } from "$lib/model/panel";
 
   onMount(() => {
-    // 初回のみサンプルを配置（見た目確認用）
+    // 初回のみサンプルを配置（センサーは実データ到着後に自動割当）
     if (editor.panel.items.length === 0) {
-      const g = createItem("Gauge", { x: 60, y: 60 }); g.sensorSrc = "SCPUUTI"; g.format = "%d%";
-      const t = createItem("SensorText", { x: 260, y: 90 }); t.sensorSrc = "TCPU"; t.format = "%d °C"; t.style.fontSize = 44; t.rect.w = 200;
+      const g = createItem("Gauge", { x: 60, y: 60 }); g.format = "%d%";
       const l = createItem("Label", { x: 260, y: 60 }); l.format = "CPU TEMP"; l.style.color = "#888";
-      const bar = createItem("BarH", { x: 60, y: 220 }); bar.sensorSrc = "SMEMUTI"; bar.rect.w = 300;
-      const gl = createItem("Label", { x: 560, y: 60 }); gl.format = "NET DOWN (Mbps)"; gl.style.color = "#888";
-      const graph = createItem("GraphLine", { x: 560, y: 90 }); graph.sensorSrc = "SNETDLRATE"; graph.rect.w = 340; graph.rect.h = 120; graph.style.color = "#00ffcc"; graph.unit = "Mbps"; graph.bgOpacity = 0.3; graph.range = [0, 1000]; // ギガビット相当の素直な固定スケール
+      const t = createItem("SensorText", { x: 260, y: 90 }); t.format = "%d °C"; t.style.fontSize = 44; t.rect.w = 200;
+      const bar = createItem("BarH", { x: 60, y: 220 }); bar.rect.w = 300;
+      const gl = createItem("Label", { x: 560, y: 60 }); gl.format = "NET DOWN"; gl.style.color = "#888";
+      const graph = createItem("GraphLine", { x: 560, y: 90 }); graph.rect.w = 340; graph.rect.h = 120; graph.style.color = "#00ffcc"; graph.unit = "B/s"; graph.bgOpacity = 0.3;
       editor.panel.items.push(g, l, t, bar, gl, graph);
       editor.bumpStructure();
+
+      // 実センサーが揃ったら、サンプルへベストマッチを一度だけ割り当てる
+      sensors.whenReady((list) => {
+        const bind = (it: PanelItem, type: string, kw: string[]) => {
+          const s = pickSensor(list, type, kw);
+          if (s) it.sensorSrc = s.id;
+        };
+        bind(g, "Load", ["CPU Total", "Total"]);
+        bind(t, "Temperature", ["CPU Package", "Core (Tctl", "CPU"]);
+        bind(bar, "Load", ["Memory", "RAM"]);
+        bind(graph, "Throughput", ["Download", "Received", "Down"]);
+        editor.bumpStructure();
+      });
     }
-    return startDummyLoop((m) => editor.setValues(m));
+    sensors.start();
   });
 </script>
 

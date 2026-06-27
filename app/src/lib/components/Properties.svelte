@@ -1,8 +1,19 @@
 <script lang="ts">
   import { editor } from "$lib/editor/editorState.svelte";
-  import { DUMMY_SENSORS } from "$lib/sensors/dummy";
+  import { sensors, type LiveSensor } from "$lib/sensors/live.svelte";
 
   const item = $derived(editor.selected);
+
+  // センサーをハードウェア別にグループ化（ピッカー表示用）
+  const grouped = $derived.by(() => {
+    const map = new Map<string, LiveSensor[]>();
+    for (const s of sensors.list) {
+      let arr = map.get(s.hw);
+      if (!arr) { arr = []; map.set(s.hw, arr); }
+      arr.push(s);
+    }
+    return [...map.entries()];
+  });
 
   // プロパティ変更を Konva 再描画へ伝える（フォントは選択中アイテムのみ変更＝独立）
   function changed(): void {
@@ -62,6 +73,10 @@
           <option value="Kbps">Kbps</option>
           <option value="Mbps">Mbps</option>
           <option value="Gbps">Gbps</option>
+          <option value="B/s">B/s</option>
+          <option value="KB/s">KB/s</option>
+          <option value="MB/s">MB/s</option>
+          <option value="GB/s">GB/s</option>
         </select>
       </label>
       <label>単位を自動換算 <input type="checkbox" bind:checked={item.autoUnit} onchange={changed} /></label>
@@ -85,7 +100,11 @@
     <label>センサー
       <select bind:value={item.sensorSrc} onchange={changed}>
         <option value={undefined}>(なし)</option>
-        {#each DUMMY_SENSORS as s}<option value={s.id}>{s.label}</option>{/each}
+        {#each grouped as [hw, arr]}
+          <optgroup label={hw}>
+            {#each arr as s}<option value={s.id}>{s.name} ({s.unit})</option>{/each}
+          </optgroup>
+        {/each}
       </select>
     </label>
     <button class="del" onclick={() => editor.deleteSelected()}>削除</button>

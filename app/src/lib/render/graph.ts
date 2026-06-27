@@ -17,20 +17,24 @@ export function niceScale(min: number, max: number, maxTicks = 4): { min: number
   return { min: Math.floor(min / step) * step, max: Math.ceil(max / step) * step, step };
 }
 
-// データレート単位の桁ラダー（各 ×1000）。
-const RATE_LADDER = ["bps", "Kbps", "Mbps", "Gbps", "Tbps"];
+// データレート単位の桁ラダー（各 ×1000）。bps系（ビット）と B/s系（バイト）。
+const RATE_LADDERS = [
+  ["bps", "Kbps", "Mbps", "Gbps", "Tbps"],
+  ["B/s", "KB/s", "MB/s", "GB/s", "TB/s"],
+];
 
 // 基準単位 baseUnit と代表値 ref（=スケール上限）から、読みやすい表示単位と
 // 変換係数を返す。レート系以外は素通し。例: ("Mbps", 0.4) → {unit:"Kbps", factor:1000}
 export function autoRateUnit(baseUnit: string, ref: number): { unit: string; factor: number } {
-  const idx = RATE_LADDER.indexOf(baseUnit);
-  if (idx < 0 || !Number.isFinite(ref) || ref <= 0) return { unit: baseUnit, factor: 1 };
+  const ladder = RATE_LADDERS.find((l) => l.includes(baseUnit));
+  if (!ladder || !Number.isFinite(ref) || ref <= 0) return { unit: baseUnit, factor: 1 };
+  const idx = ladder.indexOf(baseUnit);
   let i = idx;
   let v = ref;
   // 1000 ちょうどは桁上げしない（1000 Mbps を 1 Gbps に化けさせない）
-  while (v > 1000 && i < RATE_LADDER.length - 1) { v /= 1000; i++; }
+  while (v > 1000 && i < ladder.length - 1) { v /= 1000; i++; }
   while (v < 1 && i > 0) { v *= 1000; i--; }
-  return { unit: RATE_LADDER[i], factor: Math.pow(1000, idx - i) };
+  return { unit: ladder[i], factor: Math.pow(1000, idx - i) };
 }
 
 // 現在のスケール（[min,max]）を返す。range 指定があれば固定、無ければ自動。
