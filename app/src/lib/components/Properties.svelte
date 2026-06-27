@@ -23,14 +23,19 @@
     <label>Y <input type="number" bind:value={item.rect.y} oninput={changed} /></label>
     <label>W <input type="number" bind:value={item.rect.w} oninput={changed} /></label>
     <label>H <input type="number" bind:value={item.rect.h} oninput={changed} /></label>
+    <label>角度 <input type="number" bind:value={item.rotation} oninput={changed} /></label>
     <label>不透明度 <input type="range" min="0" max="1" step="0.05" bind:value={item.opacity} oninput={changed} /></label>
     <label>フォント
       <select bind:value={item.style.fontFamily} onchange={changed}>
-        <option>sans-serif</option>
-        <option>monospace</option>
-        <option>Orbitron</option>
-        <option>Meiryo</option>
+        <!-- Windows 標準同梱で視認差が大きいものに限定（未インストールだとフォールバックで差が出ない） -->
+        <option>Segoe UI</option>
+        <option>Arial</option>
         <option>Consolas</option>
+        <option>Times New Roman</option>
+        <option>Comic Sans MS</option>
+        <option>Impact</option>
+        <option>Meiryo</option>
+        <option>MS Gothic</option>
       </select>
     </label>
     <label>サイズ <input type="number" bind:value={item.style.fontSize} oninput={changed} /></label>

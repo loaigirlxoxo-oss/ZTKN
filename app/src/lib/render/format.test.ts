@@ -1,5 +1,17 @@
 import { describe, it, expect } from "vitest";
-import { formatValue } from "./format";
+import { formatValue, splitFormat } from "./format";
+
+describe("splitFormat", () => {
+  it("splits value and unit suffix", () => {
+    expect(splitFormat("%d °C")).toEqual({ prefix: "", token: "%d", suffix: " °C" });
+  });
+  it("splits prefix, token and suffix", () => {
+    expect(splitFormat("CPU %.1f%")).toEqual({ prefix: "CPU ", token: "%.1f", suffix: "%" });
+  });
+  it("returns null for a literal without token", () => {
+    expect(splitFormat("Label")).toBeNull();
+  });
+});
 
 describe("formatValue", () => {
   it("%d rounds to integer", () => {

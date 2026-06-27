@@ -20,6 +20,7 @@ export interface PanelItem {
   kind: ItemKind;
   rect: Rect;
   z: number;
+  rotation: number;   // 度（左上原点まわり）
   opacity: number;
   sensorSrc?: string;
   style: Style;
@@ -51,6 +52,7 @@ export function createItem(kind: ItemKind, pos: { x: number; y: number }): Panel
     kind,
     rect: { x: pos.x, y: pos.y, w: 120, h: 32 },
     z: 0,
+    rotation: 0,
     opacity: 1,
     style: defaultStyle(),
   };
