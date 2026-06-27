@@ -17,3 +17,6 @@ app/src-tauri/binaries/*.exe
 *.log
 .DS_Store
 Thumbs.db
+
+# stray capture
+tools/sensor-sidecar/out.txt
