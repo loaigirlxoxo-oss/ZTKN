@@ -1,4 +1,5 @@
 using System.IO.MemoryMappedFiles;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
 using LibreHardwareMonitor.Hardware;
@@ -84,8 +85,18 @@ static class HwInfo
 {
     const string MapName = "Global\\HWiNFO_SENS_SM2";
     const uint Signature = 0x53695748; // "SiWH"
-    // .NET コア標準で使える Latin1。0xB0→'°' などHWiNFOの単位文字を正しく復号できる。
-    static readonly Encoding Ansi = Encoding.Latin1;
+
+    [DllImport("kernel32.dll")] private static extern uint GetACP();
+
+    // HWiNFO の文字列はシステムの ANSI コードページ（日本語環境なら Shift-JIS=932）。
+    // CodePages プロバイダを登録し、実行環境の ACP で復号する（°C や日本語名が化けない）。
+    static readonly Encoding Ansi;
+    static HwInfo()
+    {
+        Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+        try { Ansi = Encoding.GetEncoding((int)GetACP()); }
+        catch { Ansi = Encoding.Latin1; }
+    }
 
     public static List<SensorDto>? TryRead()
     {
