@@ -111,30 +111,36 @@
       // 背景と枠を別ノードにして透過度を独立させる
       g.add(new Konva.Rect({ width: w, height: h, fill: item.bgColor ?? "#0d0d0d", opacity: item.bgOpacity ?? 0 }));
       g.add(new Konva.Rect({ width: w, height: h, stroke: item.frameColor ?? "#333333", strokeWidth: 1, opacity: item.frameOpacity ?? 1 }));
-      // グリッド線（上/中/下）
-      for (const gy of [0.5, h / 2, h - 0.5]) {
-        g.add(new Konva.Line({ points: [0, gy, w, gy], stroke: "#3a3a3a", strokeWidth: 1, opacity: 0.7 }));
+      const showScale = item.showScale !== false;
+      if (showScale) {
+        // グリッド線（上/中/下）
+        for (const gy of [0.5, h / 2, h - 0.5]) {
+          g.add(new Konva.Line({ points: [0, gy, w, gy], stroke: "#3a3a3a", strokeWidth: 1, opacity: 0.7 }));
+        }
       }
       const line = new Konva.Line({ points: [], stroke: item.style.color, strokeWidth: 1.5, lineJoin: "round", lineCap: "round" });
       g.add(line);
       const scaleFont = { fontFamily: item.style.fontFamily, fontSize: 11, fill: "#9aa" };
-      const topLabel = new Konva.Text({ ...scaleFont, x: 3, y: 2, text: "" });
-      const midLabel = new Konva.Text({ ...scaleFont, x: 3, y: h / 2 - 13, text: "" });
-      const botLabel = new Konva.Text({ ...scaleFont, x: 3, y: h - 14, text: "" });
-      g.add(topLabel); g.add(midLabel); g.add(botLabel);
+      const topLabel = showScale ? new Konva.Text({ ...scaleFont, x: 3, y: 2, text: "" }) : null;
+      const midLabel = showScale ? new Konva.Text({ ...scaleFont, x: 3, y: h / 2 - 13, text: "" }) : null;
+      const botLabel = showScale ? new Konva.Text({ ...scaleFont, x: 3, y: h - 14, text: "" }) : null;
+      if (topLabel) g.add(topLabel);
+      if (midLabel) g.add(midLabel);
+      if (botLabel) g.add(botLabel);
       const fmt = (n: number) => (Math.abs(n) >= 100 ? String(Math.round(n)) : n.toFixed(1));
       const apply = () => {
         const hist = item.sensorSrc ? (editor.history.get(item.sensorSrc) ?? []) : [];
         line.points(historyToPoints(hist, w, h, item.range));
+        if (!showScale) return;
         const [mn, mx] = graphScale(hist, item.range);
         // 表示単位：自動ON ならスケール上限に追従(Kbps↔Mbps↔Gbps)、OFF なら入力単位を固定
         const { unit, factor } = item.autoUnit === false
           ? { unit: item.unit ?? "", factor: 1 }
           : autoRateUnit(item.unit ?? "", mx);
         const suffix = unit ? ` ${unit}` : "";
-        topLabel.text(fmt(mx * factor) + suffix);
-        midLabel.text(fmt(((mn + mx) / 2) * factor) + suffix);
-        botLabel.text(fmt(mn * factor) + suffix);
+        topLabel!.text(fmt(mx * factor) + suffix);
+        midLabel!.text(fmt(((mn + mx) / 2) * factor) + suffix);
+        botLabel!.text(fmt(mn * factor) + suffix);
       };
       apply();
       updaters.set(item.id, () => apply()); // 値は履歴から読むので引数は使わない

@@ -27,7 +27,8 @@ export function autoRateUnit(baseUnit: string, ref: number): { unit: string; fac
   if (idx < 0 || !Number.isFinite(ref) || ref <= 0) return { unit: baseUnit, factor: 1 };
   let i = idx;
   let v = ref;
-  while (v >= 1000 && i < RATE_LADDER.length - 1) { v /= 1000; i++; }
+  // 1000 ちょうどは桁上げしない（1000 Mbps を 1 Gbps に化けさせない）
+  while (v > 1000 && i < RATE_LADDER.length - 1) { v /= 1000; i++; }
   while (v < 1 && i > 0) { v *= 1000; i--; }
   return { unit: RATE_LADDER[i], factor: Math.pow(1000, idx - i) };
 }

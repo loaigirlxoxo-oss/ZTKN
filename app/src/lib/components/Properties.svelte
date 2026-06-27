@@ -66,6 +66,7 @@
       </label>
       <label>単位を自動換算 <input type="checkbox" bind:checked={item.autoUnit} onchange={changed} /></label>
       <label>自動スケール <input type="checkbox" checked={!item.range} onchange={toggleAuto} /></label>
+      <label>スケール表示 <input type="checkbox" bind:checked={item.showScale} onchange={changed} /></label>
     {/if}
     {#if item.kind === "Gauge" || item.kind === "BarH" || item.kind === "BarV" || item.kind === "GraphLine"}
       <label>背景色 <input type="color" bind:value={item.bgColor} oninput={changed} /></label>
