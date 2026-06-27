@@ -1,5 +1,20 @@
 import { describe, it, expect } from "vitest";
-import { historyToPoints } from "./graph";
+import { historyToPoints, graphScale } from "./graph";
+
+describe("graphScale", () => {
+  it("returns the fixed range when provided", () => {
+    expect(graphScale([1, 2, 3], [0, 100])).toEqual([0, 100]);
+  });
+  it("auto-scales to history min/max", () => {
+    expect(graphScale([3, 9, 5])).toEqual([3, 9]);
+  });
+  it("widens a flat history to avoid zero span", () => {
+    expect(graphScale([7, 7])).toEqual([6, 8]);
+  });
+  it("falls back to [0,1] for empty history", () => {
+    expect(graphScale([])).toEqual([0, 1]);
+  });
+});
 
 describe("historyToPoints", () => {
   it("returns empty for fewer than 2 points", () => {

@@ -6,7 +6,7 @@
   import { itemDisplayText } from "$lib/render/draw";
   import { formatValue, splitFormat } from "$lib/render/format";
   import { valueToFraction } from "$lib/render/gauge";
-  import { historyToPoints } from "$lib/render/graph";
+  import { historyToPoints, graphScale } from "$lib/render/graph";
   import { snap } from "$lib/editor/snap";
 
   let container: HTMLDivElement;
@@ -86,13 +86,23 @@
       const apply = (val: number) => { fillArc.angle(valueToFraction(val, min, max) * 270); };
       apply(v); updaters.set(item.id, apply);
     } else if (item.kind === "GraphLine") {
-      // 時系列折れ線（ネットワーク速度などの履歴）。枠＋ポリライン。
-      g.add(new Konva.Rect({ width: item.rect.w, height: item.rect.h, stroke: "#333", fill: "#0d0d0d" }));
+      // 時系列折れ線（ネットワーク速度などの履歴）。背景は透過可・上下にスケール+単位を表示。
+      const bg = new Konva.Rect({ width: item.rect.w, height: item.rect.h, stroke: "#333", strokeWidth: 1, fill: item.bgColor ?? "#0d0d0d", opacity: item.bgOpacity ?? 0 });
+      g.add(bg);
       const line = new Konva.Line({ points: [], stroke: item.style.color, strokeWidth: 1.5, lineJoin: "round", lineCap: "round" });
       g.add(line);
+      const scaleFont = { fontFamily: item.style.fontFamily, fontSize: 11, fill: "#9aa" };
+      const maxLabel = new Konva.Text({ ...scaleFont, x: 3, y: 2, text: "" });
+      const minLabel = new Konva.Text({ ...scaleFont, x: 3, y: item.rect.h - 14, text: "" });
+      g.add(maxLabel); g.add(minLabel);
+      const unit = item.unit ? ` ${item.unit}` : "";
+      const fmt = (n: number) => (Math.abs(n) >= 100 ? String(Math.round(n)) : n.toFixed(1));
       const apply = () => {
         const hist = item.sensorSrc ? (editor.history.get(item.sensorSrc) ?? []) : [];
         line.points(historyToPoints(hist, item.rect.w, item.rect.h, item.range));
+        const [mn, mx] = graphScale(hist, item.range);
+        maxLabel.text(fmt(mx) + unit);
+        minLabel.text(fmt(mn) + unit);
       };
       apply();
       updaters.set(item.id, () => apply()); // 値は履歴から読むので引数は使わない

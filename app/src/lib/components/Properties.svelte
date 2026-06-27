@@ -14,6 +14,13 @@
     item.style.fontWeight = (e.target as HTMLInputElement).checked ? "bold" : "normal";
     changed();
   }
+
+  // グラフの自動スケール ON/OFF（OFF=range固定でmin/max指定可）
+  function toggleAuto(e: Event): void {
+    if (!item) return;
+    item.range = (e.target as HTMLInputElement).checked ? undefined : [0, 100];
+    changed();
+  }
 </script>
 
 {#if item}
@@ -42,6 +49,11 @@
     <label>太字 <input type="checkbox" checked={item.style.fontWeight === "bold"} onchange={toggleBold} /></label>
     <label>色 <input type="color" bind:value={item.style.color} oninput={changed} /></label>
     <label>format <input bind:value={item.format} oninput={changed} /></label>
+    {#if item.kind === "GraphLine"}
+      <label>単位 <input bind:value={item.unit} oninput={changed} placeholder="Mbps" /></label>
+      <label>背景透過度 <input type="range" min="0" max="1" step="0.05" bind:value={item.bgOpacity} oninput={changed} /></label>
+      <label>自動スケール <input type="checkbox" checked={!item.range} onchange={toggleAuto} /></label>
+    {/if}
     {#if item.range}
       <label>min <input type="number" bind:value={item.range[0]} oninput={changed} /></label>
       <label>max <input type="number" bind:value={item.range[1]} oninput={changed} /></label>

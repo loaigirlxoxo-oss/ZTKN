@@ -24,10 +24,13 @@ export interface PanelItem {
   opacity: number;
   sensorSrc?: string;
   style: Style;
-  range?: [number, number];
+  range?: [number, number];   // 無ければグラフは自動スケール
   asset?: string;
   gauge?: GaugeRender;
   format?: string;
+  unit?: string;              // グラフ等のスケール表示に付ける単位（例 "Mbps"）
+  bgColor?: string;           // グラフ背景色
+  bgOpacity?: number;         // グラフ背景の不透明度 0..1（0=透過）
 }
 
 export interface Panel {
@@ -59,7 +62,7 @@ export function createItem(kind: ItemKind, pos: { x: number; y: number }): Panel
   if (kind === "Label") base.format = "Label";
   if (kind === "SensorText") { base.format = "%d"; base.sensorSrc = undefined; }
   if (kind === "Gauge") { base.rect.w = 120; base.rect.h = 120; base.range = [0, 100]; base.gauge = { mode: "VectorArc" }; base.format = "%d"; }
-  if (kind === "GraphLine") { base.rect.w = 240; base.rect.h = 80; } // range無し=自動スケール
+  if (kind === "GraphLine") { base.rect.w = 240; base.rect.h = 80; base.unit = ""; base.bgColor = "#0d0d0d"; base.bgOpacity = 0; } // range無し=自動スケール、背景は透過
   if (kind === "BarH") { base.rect.w = 160; base.rect.h = 24; base.range = [0, 100]; }
   if (kind === "BarV") { base.rect.w = 24; base.rect.h = 120; base.range = [0, 100]; }
   return base;
