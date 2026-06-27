@@ -24,10 +24,10 @@
           const s = pickSensor(list, type, kw);
           if (s) it.sensorSrc = s.id;
         };
-        bind(g, "Load", ["CPU Total", "Total"]);
-        bind(t, "Temperature", ["CPU Package", "Core (Tctl", "CPU"]);
-        bind(bar, "Load", ["Memory", "RAM"]);
-        bind(graph, "Throughput", ["Download", "Received", "Down"]);
+        bind(g, "Load", ["Total CPU Usage", "CPU Total", "Total"]);
+        bind(t, "Temperature", ["CPU Package", "CPU (Tctl", "CPU Die", "Core Temperatures", "CPU"]);
+        bind(bar, "Load", ["Physical Memory Load", "Memory Usage", "Memory", "RAM"]);
+        bind(graph, "", ["Total DL", "Download Rate", "Current DL", "Download", "DL Rate"]);
         editor.bumpStructure();
       });
     }

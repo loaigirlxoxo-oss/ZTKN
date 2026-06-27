@@ -22,7 +22,7 @@ class SensorHub {
     if (this.started) return;
     this.started = true;
     await listen<string>("sensors", (e) => {
-      let payload: { sensors: RawSensor[] };
+      let payload: { source: string; sensors: RawSensor[] };
       try {
         payload = JSON.parse(e.payload);
       } catch {
@@ -35,7 +35,7 @@ class SensorHub {
       if (payload.sensors.length !== this.list.length) {
         this.list = payload.sensors.map((s) => ({ id: s.id, name: s.name, hw: s.hw, type: s.type, unit: s.unit }));
       }
-      this.status = `接続済み (${this.list.length} センサー)`;
+      this.status = `${payload.source ?? "?"} / ${this.list.length} センサー`;
       if (this.onReady && this.list.length > 0) {
         const cb = this.onReady;
         this.onReady = null;

@@ -1,57 +1,63 @@
+using System.IO.MemoryMappedFiles;
 using System.Text;
 using System.Text.Json;
 using LibreHardwareMonitor.Hardware;
 
-// LibreHardwareMonitor を使い、1秒ごとに全センサー値を JSON 1行で stdout へ出力するサイドカー。
-// Tauri(Rust) がこれを子プロセスとして起動し、stdout を読んでフロントへ転送する。
+// 1秒ごとに全センサー値を JSON 1行で stdout へ出力するサイドカー。
+// センサー源は優先順位: HWiNFO 共有メモリ（あれば全センサー＝Arrow Lake の CPU 温度等も取得可）
+// → 無ければ LibreHardwareMonitor。Tauri(Rust) が stdout を読みフロントへ転送する。
 
-var computer = new Computer
-{
-    IsCpuEnabled = true,
-    IsGpuEnabled = true,
-    IsMemoryEnabled = true,
-    IsMotherboardEnabled = true,
-    IsStorageEnabled = true,
-    IsNetworkEnabled = true,
-    IsControllerEnabled = true,
-    IsBatteryEnabled = true,
-};
-computer.Open();
-
-var visitor = new UpdateVisitor();
 var stdout = new StreamWriter(Console.OpenStandardOutput(), new UTF8Encoding(false)) { AutoFlush = false };
+
+Computer? computer = null;
+UpdateVisitor? visitor = null;
 
 while (true)
 {
-    computer.Accept(visitor); // 全ハードウェアを Update
+    string source;
+    List<SensorDto>? sensors = HwInfo.TryRead();
+    if (sensors != null)
+    {
+        source = "HWiNFO";
+    }
+    else
+    {
+        // HWiNFO が無ければ LHM（必要時に一度だけ初期化）
+        if (computer == null)
+        {
+            computer = new Computer
+            {
+                IsCpuEnabled = true, IsGpuEnabled = true, IsMemoryEnabled = true,
+                IsMotherboardEnabled = true, IsStorageEnabled = true, IsNetworkEnabled = true,
+                IsControllerEnabled = true, IsBatteryEnabled = true,
+            };
+            computer.Open();
+            visitor = new UpdateVisitor();
+        }
+        computer.Accept(visitor!);
+        sensors = new List<SensorDto>();
+        foreach (var hw in computer.Hardware) CollectLhm(hw, sensors);
+        source = "LHM";
+    }
 
-    var sensors = new List<SensorDto>();
-    foreach (var hw in computer.Hardware) Collect(hw, sensors);
-
-    stdout.WriteLine(JsonSerializer.Serialize(new Payload(sensors)));
+    stdout.WriteLine(JsonSerializer.Serialize(new Payload(source, sensors)));
     stdout.Flush();
     Thread.Sleep(1000);
 }
 
-static void Collect(IHardware hw, List<SensorDto> outList)
+static void CollectLhm(IHardware hw, List<SensorDto> outList)
 {
     foreach (var s in hw.Sensors)
     {
         if (s.Value is float v && !float.IsNaN(v) && !float.IsInfinity(v))
         {
-            outList.Add(new SensorDto(
-                s.Identifier.ToString(),
-                s.Name,
-                hw.Name,
-                s.SensorType.ToString(),
-                v,
-                UnitFor(s.SensorType)));
+            outList.Add(new SensorDto(s.Identifier.ToString(), s.Name, hw.Name, s.SensorType.ToString(), v, UnitForLhm(s.SensorType)));
         }
     }
-    foreach (var sub in hw.SubHardware) Collect(sub, outList);
+    foreach (var sub in hw.SubHardware) CollectLhm(sub, outList);
 }
 
-static string UnitFor(SensorType t) => t switch
+static string UnitForLhm(SensorType t) => t switch
 {
     SensorType.Temperature => "°C",
     SensorType.Load => "%",
@@ -71,7 +77,77 @@ static string UnitFor(SensorType t) => t switch
 };
 
 record SensorDto(string id, string name, string hw, string type, float value, string unit);
-record Payload(List<SensorDto> sensors);
+record Payload(string source, List<SensorDto> sensors);
+
+// HWiNFO 共有メモリ "Global\HWiNFO_SENS_SM2" を読み取る。HWiNFO 未起動なら null。
+static class HwInfo
+{
+    const string MapName = "Global\\HWiNFO_SENS_SM2";
+    const uint Signature = 0x53695748; // "SiWH"
+    // .NET コア標準で使える Latin1。0xB0→'°' などHWiNFOの単位文字を正しく復号できる。
+    static readonly Encoding Ansi = Encoding.Latin1;
+
+    public static List<SensorDto>? TryRead()
+    {
+        MemoryMappedFile mmf;
+        try { mmf = MemoryMappedFile.OpenExisting(MapName, MemoryMappedFileRights.Read); }
+        catch { return null; }
+        try
+        {
+            using (mmf)
+            using (var acc = mmf.CreateViewAccessor(0, 0, MemoryMappedFileAccess.Read))
+            {
+                if (acc.ReadUInt32(0) != Signature) return null;
+                uint offSensor = acc.ReadUInt32(20);
+                uint sizeSensor = acc.ReadUInt32(24);
+                uint numSensor = acc.ReadUInt32(28);
+                uint offReading = acc.ReadUInt32(32);
+                uint sizeReading = acc.ReadUInt32(36);
+                uint numReading = acc.ReadUInt32(40);
+
+                var hwNames = new string[numSensor];
+                for (uint i = 0; i < numSensor; i++)
+                {
+                    long b = offSensor + (long)i * sizeSensor;
+                    hwNames[i] = ReadStr(acc, b + 136, 128); // szSensorNameUser
+                }
+
+                var list = new List<SensorDto>((int)numReading);
+                for (uint i = 0; i < numReading; i++)
+                {
+                    long b = offReading + (long)i * sizeReading;
+                    uint tReading = acc.ReadUInt32(b + 0);
+                    uint sensorIndex = acc.ReadUInt32(b + 4);
+                    string labelOrig = ReadStr(acc, b + 12, 128);
+                    string labelUser = ReadStr(acc, b + 140, 128);
+                    string unit = ReadStr(acc, b + 268, 16);
+                    double value = acc.ReadDouble(b + 284);
+                    if (double.IsNaN(value) || double.IsInfinity(value)) continue;
+                    string hw = sensorIndex < numSensor ? hwNames[sensorIndex] : "HWiNFO";
+                    string id = $"hwinfo/{hw}/{labelOrig}";
+                    list.Add(new SensorDto(id, labelUser, hw, TypeName(tReading), (float)value, unit));
+                }
+                return list.Count > 0 ? list : null;
+            }
+        }
+        catch { return null; }
+    }
+
+    static string ReadStr(MemoryMappedViewAccessor acc, long offset, int max)
+    {
+        var buf = new byte[max];
+        acc.ReadArray(offset, buf, 0, max);
+        int n = Array.IndexOf(buf, (byte)0);
+        if (n < 0) n = max;
+        return Ansi.GetString(buf, 0, n);
+    }
+
+    static string TypeName(uint t) => t switch
+    {
+        1 => "Temperature", 2 => "Voltage", 3 => "Fan", 4 => "Current",
+        5 => "Power", 6 => "Clock", 7 => "Load", _ => "Other",
+    };
+}
 
 class UpdateVisitor : IVisitor
 {
