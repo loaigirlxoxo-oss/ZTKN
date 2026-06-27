@@ -68,7 +68,7 @@
     } else if (item.kind === "BarH" || item.kind === "BarV") {
       const [min, max] = item.range ?? [0, 100];
       const w = item.rect.w, h = item.rect.h;
-      const pad = 2; // 枠とバーが重ならないよう内側に余白
+      const pad = 1; // 枠線幅ぶんだけ内側に寄せ、枠とバーを隙間なく接させる
       const innerW = Math.max(0, w - pad * 2), innerH = Math.max(0, h - pad * 2);
       // 背景トラック（内側）
       g.add(new Konva.Rect({ x: pad, y: pad, width: innerW, height: innerH, fill: item.bgColor ?? "#333333", opacity: item.bgOpacity ?? 1 }));
@@ -83,8 +83,8 @@
       const clipGroup = new Konva.Group({ x: pad, y: pad, clipX: 0, clipY: 0, clipWidth: innerW, clipHeight: innerH });
       clipGroup.add(new Konva.Rect({ width: innerW, height: innerH, ...grad }));
       g.add(clipGroup);
-      // 枠（全体サイズ）
-      g.add(new Konva.Rect({ width: w, height: h, stroke: item.frameColor ?? item.style.color, strokeWidth: 1, opacity: item.frameOpacity ?? 1 }));
+      // 枠（線を内側に収め、内側エッジが pad=1 に来てバーと隙間なく接する）
+      g.add(new Konva.Rect({ x: 0.5, y: 0.5, width: w - 1, height: h - 1, stroke: item.frameColor ?? item.style.color, strokeWidth: 1, opacity: item.frameOpacity ?? 1 }));
       const apply = (val: number) => {
         const f = valueToFraction(val, min, max);
         if (item.kind === "BarH") {
