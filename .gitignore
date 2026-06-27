@@ -1,0 +1,13 @@
+# Node
+node_modules/
+dist/
+.vite/
+
+# Rust / Tauri
+**/target/
+app/src-tauri/gen/
+
+# Logs & OS
+*.log
+.DS_Store
+Thumbs.db
