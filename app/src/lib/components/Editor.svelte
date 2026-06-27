@@ -30,6 +30,9 @@
 <div class="toolbar">
   <button onclick={doSave}>保存</button>
   <button onclick={doLoad}>読込</button>
+  <span class="sep">|</span>
+  <label class="size">レイアウト幅 <input type="number" min="100" bind:value={editor.panel.size.w} /></label>
+  <label class="size">高さ <input type="number" min="100" bind:value={editor.panel.size.h} /></label>
   <span class="msg">{msg}</span>
 </div>
 
@@ -42,6 +45,9 @@
 <style>
   .toolbar { display: flex; gap: 8px; align-items: center; padding: 6px 8px; background: #111; border-bottom: 1px solid #222; }
   .toolbar button { padding: 4px 12px; background: #2a2a2a; color: #ddd; border: 1px solid #3a3a3a; cursor: pointer; }
+  .sep { color: #444; }
+  .size { color: #aaa; font-size: 12px; display: flex; align-items: center; gap: 4px; }
+  .size input { width: 70px; background: #222; color: #ddd; border: 1px solid #3a3a3a; }
   .msg { color: #00ffcc; font-size: 12px; }
   .editor { display: flex; align-items: flex-start; height: calc(100vh - 41px); }
   .canvas-wrap { flex: 1; padding: 16px; overflow: auto; }

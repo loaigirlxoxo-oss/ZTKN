@@ -52,8 +52,12 @@
   }
 
   function buildNode(item: PanelItem): Konva.Group {
+    // offset を中心に置くことで、回転（ハンドル・数値とも）がオブジェクト中心を軸になる。
+    // 子は従来どおり 0..w,0..h に描き、offset が左上を rect.x/y に合わせる。
+    const cx = item.rect.w / 2, cy = item.rect.h / 2;
     const g = new Konva.Group({
-      x: item.rect.x, y: item.rect.y, width: item.rect.w, height: item.rect.h,
+      x: item.rect.x + cx, y: item.rect.y + cy, offsetX: cx, offsetY: cy,
+      width: item.rect.w, height: item.rect.h,
       rotation: item.rotation, opacity: item.opacity, id: item.id, draggable: true,
     });
     const v = valueFor(item);
@@ -89,20 +93,28 @@
   function wireNode(g: Konva.Group, item: PanelItem): void {
     g.on("mousedown touchstart", (e) => { e.cancelBubble = true; editor.selectedId = item.id; });
     g.on("dragend", () => {
-      item.rect.x = snap(g.x(), 5);
-      item.rect.y = snap(g.y(), 5);
-      g.position({ x: item.rect.x, y: item.rect.y });
+      // offset=中心なので g.x()/y() は中心。rect は左上で持つ。
+      item.rect.x = snap(g.x() - item.rect.w / 2, 5);
+      item.rect.y = snap(g.y() - item.rect.h / 2, 5);
+      g.position({ x: item.rect.x + item.rect.w / 2, y: item.rect.y + item.rect.h / 2 });
       layer.batchDraw();
     });
     g.on("transformend", () => {
-      // リサイズ・回転の両方を確定（回転すると位置も動くので x/y も保存）
-      item.rect.w = Math.max(8, Math.round(g.width() * g.scaleX()));
-      item.rect.h = Math.max(8, Math.round(g.height() * g.scaleY()));
-      item.rect.x = snap(g.x(), 5);
-      item.rect.y = snap(g.y(), 5);
+      const sx = g.scaleX(), sy = g.scaleY();
+      const w = Math.max(8, Math.round(g.width() * sx));
+      const h = Math.max(8, Math.round(g.height() * sy));
+      // テキスト系は縦方向の拡縮にフォントサイズを追従させる（箱だけ伸びて文字が戻る問題の解消）
+      if (item.kind === "Label" || item.kind === "SensorText") {
+        item.style.fontSize = Math.max(6, Math.round(item.style.fontSize * sy));
+      }
+      const cxAbs = g.x(), cyAbs = g.y(); // offset=中心なので現在の中心座標
+      item.rect.w = w;
+      item.rect.h = h;
+      item.rect.x = snap(cxAbs - w / 2, 5);
+      item.rect.y = snap(cyAbs - h / 2, 5);
       item.rotation = Math.round(g.rotation());
       g.scale({ x: 1, y: 1 });
-      editor.bumpStructure(); // 新サイズ・角度で作り直す
+      editor.bumpStructure(); // 新サイズ・角度・フォントで作り直す
     });
   }
 
@@ -150,6 +162,8 @@
   $effect(() => { editor.selectedId; if (stage) untrack(() => { attachTransformer(); layer.batchDraw(); }); });
   // 値更新（1秒）は動的部分だけ更新（構造・サイズは維持）
   $effect(() => { editor.values; if (stage) untrack(() => applyValues()); });
+  // パネル（レイアウト）サイズ変更で Konva ステージをリサイズ
+  $effect(() => { const w = editor.panel.size.w, h = editor.panel.size.h; if (stage) untrack(() => stage!.size({ width: w, height: h })); });
 </script>
 
 <div bind:this={container} class="stage" style="width:{editor.panel.size.w}px;height:{editor.panel.size.h}px"></div>
