@@ -6,6 +6,7 @@
     { kind: "Label", label: "▢ ラベル" },
     { kind: "SensorText", label: "# センサー値" },
     { kind: "Gauge", label: "◔ ゲージ" },
+    { kind: "GraphLine", label: "∿ グラフ" },
     { kind: "BarH", label: "▭ 横バー" },
     { kind: "BarV", label: "▯ 縦バー" },
   ];

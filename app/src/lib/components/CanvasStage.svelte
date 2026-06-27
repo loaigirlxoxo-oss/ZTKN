@@ -6,6 +6,7 @@
   import { itemDisplayText } from "$lib/render/draw";
   import { formatValue, splitFormat } from "$lib/render/format";
   import { valueToFraction } from "$lib/render/gauge";
+  import { historyToPoints } from "$lib/render/graph";
   import { snap } from "$lib/editor/snap";
 
   let container: HTMLDivElement;
@@ -84,6 +85,17 @@
       // 中央は数値を出さず透過（リング内側は innerRadius=0.7r で空＝透過のまま）
       const apply = (val: number) => { fillArc.angle(valueToFraction(val, min, max) * 270); };
       apply(v); updaters.set(item.id, apply);
+    } else if (item.kind === "GraphLine") {
+      // 時系列折れ線（ネットワーク速度などの履歴）。枠＋ポリライン。
+      g.add(new Konva.Rect({ width: item.rect.w, height: item.rect.h, stroke: "#333", fill: "#0d0d0d" }));
+      const line = new Konva.Line({ points: [], stroke: item.style.color, strokeWidth: 1.5, lineJoin: "round", lineCap: "round" });
+      g.add(line);
+      const apply = () => {
+        const hist = item.sensorSrc ? (editor.history.get(item.sensorSrc) ?? []) : [];
+        line.points(historyToPoints(hist, item.rect.w, item.rect.h, item.range));
+      };
+      apply();
+      updaters.set(item.id, () => apply()); // 値は履歴から読むので引数は使わない
     }
 
     wireNode(g, item);

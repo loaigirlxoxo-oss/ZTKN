@@ -5,6 +5,9 @@ class EditorState {
   panel = $state<Panel>(createPanel(960, 360));
   selectedId = $state<string | null>(null);
   values = $state<Map<string, number>>(new Map());
+  // 折れ線グラフ用の履歴リングバッファ（センサーIDごと）。描画は values 更新時に行うため非リアクティブで保持。
+  readonly historyLen = 120;
+  history = new Map<string, number[]>();
   // 構造変更（追加/削除/プロパティ変更/リサイズ）を Konva 再描画へ伝える手動トリガ
   structureVersion = $state(0);
 
@@ -27,6 +30,13 @@ class EditorState {
   }
 
   setValues(m: Map<string, number>): void {
+    // 履歴へ追記（values を更新する前に行い、描画時に最新が読めるようにする）
+    for (const [k, v] of m) {
+      let arr = this.history.get(k);
+      if (!arr) { arr = []; this.history.set(k, arr); }
+      arr.push(v);
+      if (arr.length > this.historyLen) arr.shift();
+    }
     this.values = m;
   }
 

@@ -59,6 +59,7 @@ export function createItem(kind: ItemKind, pos: { x: number; y: number }): Panel
   if (kind === "Label") base.format = "Label";
   if (kind === "SensorText") { base.format = "%d"; base.sensorSrc = undefined; }
   if (kind === "Gauge") { base.rect.w = 120; base.rect.h = 120; base.range = [0, 100]; base.gauge = { mode: "VectorArc" }; base.format = "%d"; }
+  if (kind === "GraphLine") { base.rect.w = 240; base.rect.h = 80; } // range無し=自動スケール
   if (kind === "BarH") { base.rect.w = 160; base.rect.h = 24; base.range = [0, 100]; }
   if (kind === "BarV") { base.rect.w = 24; base.rect.h = 120; base.range = [0, 100]; }
   return base;

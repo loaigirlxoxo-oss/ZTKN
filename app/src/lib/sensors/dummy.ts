@@ -8,6 +8,8 @@ export const DUMMY_SENSORS: DummySensor[] = [
   { id: "SGPU1UTI", label: "GPU使用率", min: 0, max: 100 },
   { id: "TGPU1DIO", label: "GPU温度", min: 30, max: 85 },
   { id: "SMEMUTI", label: "メモリ使用率", min: 0, max: 100 },
+  { id: "SNETDLRATE", label: "NW 下り(Mbps)", min: 0, max: 600 },
+  { id: "SNETULRATE", label: "NW 上り(Mbps)", min: 0, max: 200 },
 ];
 
 // 時刻に対して滑らかに揺れる決定的サイン波。乱数を使わずテスト可能に。
