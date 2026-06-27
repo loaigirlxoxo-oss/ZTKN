@@ -73,6 +73,10 @@
       <label>枠色 <input type="color" bind:value={item.frameColor} oninput={changed} /></label>
       <label>枠透過度 <input type="range" min="0" max="1" step="0.05" bind:value={item.frameOpacity} oninput={changed} /></label>
     {/if}
+    {#if item.kind === "BarH" || item.kind === "BarV"}
+      <label>2色グラデ <input type="checkbox" bind:checked={item.useGradient} onchange={changed} /></label>
+      <label>色2 <input type="color" bind:value={item.gradColor} oninput={changed} /></label>
+    {/if}
     {#if item.range}
       <label>min <input type="number" bind:value={item.range[0]} oninput={changed} /></label>
       <label>max <input type="number" bind:value={item.range[1]} oninput={changed} /></label>

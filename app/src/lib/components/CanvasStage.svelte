@@ -67,15 +67,31 @@
       updaters.set(item.id, addValueUnit(g, item, v, item.rect.w, false, 0));
     } else if (item.kind === "BarH" || item.kind === "BarV") {
       const [min, max] = item.range ?? [0, 100];
-      // 背景トラック（全体opacityとは別に背景だけ透過可）
-      g.add(new Konva.Rect({ width: item.rect.w, height: item.rect.h, fill: item.bgColor ?? "#333333", opacity: item.bgOpacity ?? 1 }));
-      const fill = new Konva.Rect({ fill: item.style.color });
-      g.add(fill);
-      g.add(new Konva.Rect({ width: item.rect.w, height: item.rect.h, stroke: item.frameColor ?? item.style.color, strokeWidth: 1, opacity: item.frameOpacity ?? 1 }));
+      const w = item.rect.w, h = item.rect.h;
+      const pad = 2; // 枠とバーが重ならないよう内側に余白
+      const innerW = Math.max(0, w - pad * 2), innerH = Math.max(0, h - pad * 2);
+      // 背景トラック（内側）
+      g.add(new Konva.Rect({ x: pad, y: pad, width: innerW, height: innerH, fill: item.bgColor ?? "#333333", opacity: item.bgOpacity ?? 1 }));
+      // 値バー：クリップ群で露出量を制御し、グラデは全長に固定（伸縮で色が変わらない）
+      const color1 = item.style.color;
+      const color2 = item.gradColor ?? item.style.color;
+      const grad = item.useGradient
+        ? (item.kind === "BarH"
+            ? { fillLinearGradientStartPoint: { x: 0, y: 0 }, fillLinearGradientEndPoint: { x: innerW, y: 0 }, fillLinearGradientColorStops: [0, color1, 1, color2] }
+            : { fillLinearGradientStartPoint: { x: 0, y: innerH }, fillLinearGradientEndPoint: { x: 0, y: 0 }, fillLinearGradientColorStops: [0, color1, 1, color2] })
+        : { fill: color1 };
+      const clipGroup = new Konva.Group({ x: pad, y: pad, clipX: 0, clipY: 0, clipWidth: innerW, clipHeight: innerH });
+      clipGroup.add(new Konva.Rect({ width: innerW, height: innerH, ...grad }));
+      g.add(clipGroup);
+      // 枠（全体サイズ）
+      g.add(new Konva.Rect({ width: w, height: h, stroke: item.frameColor ?? item.style.color, strokeWidth: 1, opacity: item.frameOpacity ?? 1 }));
       const apply = (val: number) => {
         const f = valueToFraction(val, min, max);
-        if (item.kind === "BarH") fill.setAttrs({ x: 0, y: 0, width: item.rect.w * f, height: item.rect.h });
-        else fill.setAttrs({ x: 0, y: item.rect.h * (1 - f), width: item.rect.w, height: item.rect.h * f });
+        if (item.kind === "BarH") {
+          clipGroup.clipX(0); clipGroup.clipY(0); clipGroup.clipWidth(innerW * f); clipGroup.clipHeight(innerH);
+        } else {
+          clipGroup.clipX(0); clipGroup.clipWidth(innerW); clipGroup.clipY(innerH * (1 - f)); clipGroup.clipHeight(innerH * f);
+        }
       };
       apply(v); updaters.set(item.id, apply);
     } else if (item.kind === "Gauge") {

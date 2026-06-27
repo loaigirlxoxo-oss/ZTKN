@@ -34,6 +34,8 @@ export interface PanelItem {
   bgOpacity?: number;         // 背景の不透明度 0..1（0=透過）。全体opacityとは独立
   frameColor?: string;        // 枠（境界線）の色。本体色とは独立
   frameOpacity?: number;      // 枠の不透明度 0..1（0=透過）。背景・全体opacityとは独立
+  useGradient?: boolean;      // バーの塗りを2色グラデにするか
+  gradColor?: string;         // グラデの色2（色1は style.color）
 }
 
 export interface Panel {
@@ -66,8 +68,8 @@ export function createItem(kind: ItemKind, pos: { x: number; y: number }): Panel
   if (kind === "SensorText") { base.format = "%d"; base.sensorSrc = undefined; }
   if (kind === "Gauge") { base.rect.w = 120; base.rect.h = 120; base.range = [0, 100]; base.gauge = { mode: "VectorArc" }; base.format = "%d"; base.bgColor = "#222222"; base.bgOpacity = 1; base.frameColor = "#333333"; base.frameOpacity = 1; }
   if (kind === "GraphLine") { base.rect.w = 240; base.rect.h = 80; base.unit = ""; base.autoUnit = true; base.bgColor = "#0d0d0d"; base.bgOpacity = 0; base.frameColor = "#333333"; base.frameOpacity = 1; } // range無し=自動スケール、背景は透過
-  if (kind === "BarH") { base.rect.w = 160; base.rect.h = 24; base.range = [0, 100]; base.bgColor = "#333333"; base.bgOpacity = 1; base.frameColor = "#555555"; base.frameOpacity = 1; }
-  if (kind === "BarV") { base.rect.w = 24; base.rect.h = 120; base.range = [0, 100]; base.bgColor = "#333333"; base.bgOpacity = 1; base.frameColor = "#555555"; base.frameOpacity = 1; }
+  if (kind === "BarH") { base.rect.w = 160; base.rect.h = 24; base.range = [0, 100]; base.bgColor = "#333333"; base.bgOpacity = 1; base.frameColor = "#555555"; base.frameOpacity = 1; base.useGradient = false; base.gradColor = "#ff3333"; }
+  if (kind === "BarV") { base.rect.w = 24; base.rect.h = 120; base.range = [0, 100]; base.bgColor = "#333333"; base.bgOpacity = 1; base.frameColor = "#555555"; base.frameOpacity = 1; base.useGradient = false; base.gradColor = "#ff3333"; }
   return base;
 }
 
