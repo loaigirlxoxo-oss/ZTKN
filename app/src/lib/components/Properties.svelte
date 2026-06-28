@@ -1,6 +1,7 @@
 <script lang="ts">
   import { editor } from "$lib/editor/editorState.svelte";
   import { sensors, type LiveSensor } from "$lib/sensors/live.svelte";
+  import { formatForUnit } from "$lib/render/format";
 
   const item = $derived(editor.selected);
 
@@ -18,6 +19,15 @@
   // プロパティ変更を Konva 再描画へ伝える（フォントは選択中アイテムのみ変更＝独立）
   function changed(): void {
     editor.bumpStructure();
+  }
+
+  // センサーを選んだら、その単位から format を自動設定（SensorTextのみ）
+  function sensorChanged(): void {
+    if (item && item.kind === "SensorText") {
+      const s = sensors.list.find((x) => x.id === item.sensorSrc);
+      item.format = formatForUnit(s?.unit);
+    }
+    changed();
   }
 
   function toggleBold(e: Event): void {
@@ -130,7 +140,7 @@
       <label>max <input type="number" bind:value={item.range[1]} oninput={changed} /></label>
     {/if}
     <label>センサー
-      <select bind:value={item.sensorSrc} onchange={changed}>
+      <select bind:value={item.sensorSrc} onchange={sensorChanged}>
         <option value={undefined}>(なし)</option>
         {#each grouped as [hw, arr]}
           <optgroup label={hw}>

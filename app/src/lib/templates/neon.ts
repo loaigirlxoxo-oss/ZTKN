@@ -1,6 +1,7 @@
 import { createPanel, createItem, type Panel, type PanelItem } from "$lib/model/panel";
 import { sensors } from "$lib/sensors/live.svelte";
 import { pickSensor } from "$lib/sensors/match";
+import { formatForUnit } from "$lib/render/format";
 
 // 素材を使わず、うちのベクター描画＋実センサーで組む 1920x480 テンプレ「Neon」。
 // センサーは実行時にライブ一覧へキーワードでベストバインド（決め打ちパスなし）。
@@ -9,15 +10,17 @@ export function buildNeonTemplate(): Panel {
   const items: PanelItem[] = [];
   const add = <T extends PanelItem>(it: T): T => { items.push(it); return it; };
   const bind = (type: string, kw: string[]) => pickSensor(sensors.list, type, kw)?.id;
+  const unitOf = (id?: string) => sensors.list.find((s) => s.id === id)?.unit;
 
   const label = (txt: string, x: number, y: number, size = 14, color = "#8a8") => {
     const it = createItem("Label", { x, y });
     it.format = txt; it.style.fontSize = size; it.style.color = color; it.rect.w = 220;
     return add(it);
   };
-  const text = (x: number, y: number, fmt: string, sensor: string | undefined, size: number, color: string, w = 180) => {
+  // 数値表示。format はセンサーの単位から自動（℃/%/W等を手書きしない）
+  const text = (x: number, y: number, sensor: string | undefined, size: number, color: string, w = 180) => {
     const it = createItem("SensorText", { x, y });
-    it.format = fmt; it.sensorSrc = sensor; it.style.fontSize = size; it.style.color = color;
+    it.format = formatForUnit(unitOf(sensor)); it.sensorSrc = sensor; it.style.fontSize = size; it.style.color = color;
     it.rect.w = w; it.rect.h = size + 8;
     return add(it);
   };
@@ -50,13 +53,13 @@ export function buildNeonTemplate(): Panel {
   // --- CPU（左） ---
   label("CPU", 60, 56, 20, WARM);
   gauge(96, 100, cpuTemp, [20, 95], WARM);
-  text(250, 116, "%d ℃", cpuTemp, 54, "#eee8d6", 200);
+  text(250, 116, cpuTemp, 54, "#eee8d6", 200);
   label("LOAD", 60, 300, 14);
   bar(60, 320, cpuLoad, GREEN, "#ff5a3c");
-  text(352, 318, "%d%", cpuLoad, 22, "#ccc", 90);
+  text(352, 318, cpuLoad, 22, "#ccc", 90);
   label("DRAM", 60, 360, 14);
   bar(60, 380, dram, "#ffd23f", "#ff5a3c");
-  text(352, 378, "%d%", dram, 22, "#ccc", 90);
+  text(352, 378, dram, 22, "#ccc", 90);
 
   // --- 中央：ネットワーク / 電力 / 時計 ---
   label("NETWORK  ↓ / ↑", 660, 56, 14, COOL);
@@ -80,13 +83,13 @@ export function buildNeonTemplate(): Panel {
   // --- GPU（右） ---
   label("GPU", 1700, 56, 20, COOL);
   gauge(1700, 100, gpuTemp, [20, 90], COOL);
-  text(1470, 116, "%d ℃", gpuTemp, 54, "#eee8d6", 200);
+  text(1470, 116, gpuTemp, 54, "#eee8d6", 200);
   label("LOAD", 1540, 300, 14);
   bar(1540, 320, gpuLoad, COOL, "#8652ff");
-  text(1832, 318, "%d%", gpuLoad, 22, "#ccc", 80);
+  text(1832, 318, gpuLoad, 22, "#ccc", 80);
   label("VRAM", 1540, 360, 14);
   bar(1540, 380, vram, "#8652ff", "#ff3484");
-  text(1832, 378, "%d%", vram, 22, "#ccc", 80);
+  text(1832, 378, vram, 22, "#ccc", 80);
 
   panel.items = items;
   return panel;
