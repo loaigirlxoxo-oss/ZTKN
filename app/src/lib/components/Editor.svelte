@@ -6,7 +6,7 @@
   import AssetLibrary from "./AssetLibrary.svelte";
   import { editor } from "$lib/editor/editorState.svelte";
   import { sensors } from "$lib/sensors/live.svelte";
-  import { savePanel, loadPanel } from "$lib/editor/persist";
+  import { savePanel, loadPanel, listPanels } from "$lib/editor/persist";
   import { templates } from "$lib/templates";
   import { view } from "$lib/editor/view.svelte";
   import { monitorStore, loadMonitors, selectMonitor, monitorLabel } from "$lib/editor/monitors.svelte";
@@ -15,6 +15,13 @@
   let msg = $state("");
   let showAssets = $state(true);
   let wrapEl: HTMLDivElement | undefined = $state();
+  let panelName = $state("default");        // 保存/読込に使う名前
+  let savedList = $state<string[]>([]);      // 保存済みパネル一覧
+
+  async function refreshSavedList(): Promise<void> {
+    try { savedList = await listPanels(); } catch { /* 一覧取得失敗時は空のまま */ }
+  }
+  refreshSavedList();
 
   function loadTemplate(i: number): void {
     const t = templates[i];
@@ -60,19 +67,25 @@
   });
 
   async function doSave(): Promise<void> {
+    const name = panelName.trim();
+    if (!name) { msg = "名前を入力してください"; return; }
     try {
-      await savePanel("default", editor.panel);
-      msg = "保存しました";
+      await savePanel(name, editor.panel);
+      await refreshSavedList();
+      msg = `「${name}」を保存しました`;
     } catch (e) {
       msg = "保存失敗: " + e; // 握りつぶさず表示
     }
   }
 
-  async function doLoad(): Promise<void> {
+  async function doLoad(name: string): Promise<void> {
+    if (!name) return;
     try {
-      const p = await loadPanel("default");
+      const p = await loadPanel(name);
       editor.replacePanel(p);
-      msg = "読込しました";
+      panelName = name; // 次の保存先を読み込んだ名前にそろえる
+      fitZoom();
+      msg = `「${name}」を読み込みました`;
     } catch (e) {
       msg = "読込失敗: " + e; // 破損時も空で上書きしない
     }
@@ -81,8 +94,12 @@
 
 <div class="column">
   <div class="toolbar">
-    <button onclick={doSave}>保存</button>
-    <button onclick={doLoad}>読込</button>
+    <input class="pname" type="text" bind:value={panelName} placeholder="パネル名" title="保存名" />
+    <button onclick={doSave} title="この名前で保存（既存なら上書き）">保存</button>
+    <select class="ploadsel" title="保存済みパネルを読み込む" value="" onchange={(e) => { const v = e.currentTarget.value; if (v) doLoad(v); e.currentTarget.value = ""; }}>
+      <option value="">読込…</option>
+      {#each savedList as n}<option value={n}>{n}</option>{/each}
+    </select>
     <button onclick={() => editor.undo()} disabled={!editor.canUndo} title="元に戻す (Ctrl+Z)">↶</button>
     <button onclick={() => editor.redo()} disabled={!editor.canRedo} title="やり直し (Ctrl+Y)">↷</button>
     <button onclick={() => (showAssets = !showAssets)}>アセット{showAssets ? "▼" : "▲"}</button>
@@ -150,6 +167,8 @@
   .size { color: #aaa; font-size: 12px; display: flex; align-items: center; gap: 4px; }
   .size input { width: 70px; background: #222; color: #ddd; border: 1px solid #3a3a3a; }
   .auto { color: #aaa; font-size: 12px; display: flex; align-items: center; gap: 3px; }
+  .pname { width: 110px; background: #222; color: #ddd; border: 1px solid #3a3a3a; padding: 3px 6px; }
+  .ploadsel { background: #2a2a2a; color: #ddd; border: 1px solid #3a3a3a; }
   .align { display: flex; align-items: center; gap: 2px; }
   .align button { padding: 2px 7px; font-size: 13px; line-height: 1; }
   .sensor-status { color: #8ab; font-size: 12px; }

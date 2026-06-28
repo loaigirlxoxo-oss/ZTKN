@@ -77,6 +77,24 @@ fn load_panel(name: String) -> Result<String, String> {
     std::fs::read_to_string(&path).map_err(|e| e.to_string())
 }
 
+// 保存済みパネル名（PCStatusPanels内の *.json のベース名）を列挙する。
+#[tauri::command]
+fn list_panels() -> Vec<String> {
+    let mut names: Vec<String> = vec![];
+    if let Ok(rd) = std::fs::read_dir(panels_dir()) {
+        for e in rd.flatten() {
+            let p = e.path();
+            if p.extension().and_then(|s| s.to_str()) == Some("json") {
+                if let Some(stem) = p.file_stem().and_then(|s| s.to_str()) {
+                    names.push(stem.to_string());
+                }
+            }
+        }
+    }
+    names.sort();
+    names
+}
+
 // 任意のテキストファイルを読む（AIDA64 の layout.json 取り込み等）。
 #[tauri::command]
 fn read_text_file(path: String) -> Result<String, String> {
@@ -301,7 +319,7 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
-            greet, save_panel, load_panel, read_text_file, list_dir_images,
+            greet, save_panel, load_panel, list_panels, read_text_file, list_dir_images,
             assets_root, open_assets_dir, list_asset_sets, list_fonts
         ])
         .run(tauri::generate_context!())

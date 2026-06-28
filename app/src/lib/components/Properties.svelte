@@ -79,6 +79,16 @@
     <label>太字 <input type="checkbox" checked={item.style.fontWeight === "bold"} onchange={toggleBold} /></label>
     <label>色 <input type="color" bind:value={item.style.color} oninput={changed} /></label>
     <label>format <input bind:value={item.format} oninput={changed} /></label>
+    {#if item.kind === "Label" || item.kind === "SensorText" || item.kind === "DateTime"}
+      <label>フチ色 <input type="color" value={item.style.strokeColor ?? "#000000"} oninput={(e) => { item.style.strokeColor = e.currentTarget.value; changed(); }} /></label>
+      <label>フチ太さ <input type="number" min="0" step="0.5" value={item.style.strokeWidth ?? 0} oninput={(e) => { item.style.strokeWidth = +e.currentTarget.value; changed(); }} /></label>
+      <label>フチぼかし(グロー) <input type="number" min="0" value={item.style.glowBlur ?? 0} oninput={(e) => { item.style.glowBlur = +e.currentTarget.value; changed(); }} /></label>
+      <label>影色 <input type="color" value={item.style.shadowColor ?? "#000000"} oninput={(e) => { item.style.shadowColor = e.currentTarget.value; changed(); }} /></label>
+      <label>影ぼかし(広がり) <input type="number" min="0" value={item.style.shadowBlur ?? 0} oninput={(e) => { item.style.shadowBlur = +e.currentTarget.value; changed(); }} /></label>
+      <label>影の濃さ <input type="range" min="0" max="1" step="0.05" value={item.style.shadowOpacity ?? 1} oninput={(e) => { item.style.shadowOpacity = +e.currentTarget.value; changed(); }} /></label>
+      <label>影X <input type="number" value={item.style.shadowOffsetX ?? 0} oninput={(e) => { item.style.shadowOffsetX = +e.currentTarget.value; changed(); }} /></label>
+      <label>影Y <input type="number" value={item.style.shadowOffsetY ?? 0} oninput={(e) => { item.style.shadowOffsetY = +e.currentTarget.value; changed(); }} /></label>
+    {/if}
     {#if item.kind === "GraphLine"}
       <label>単位
         <select bind:value={item.unit} onchange={changed}>

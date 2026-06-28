@@ -8,6 +8,14 @@ export interface Style {
   fontWeight: "normal" | "bold";
   color: string;
   align: "left" | "center" | "right";
+  strokeColor?: string;     // 文字のフチ色
+  strokeWidth?: number;     // フチ太さ（0/未指定=なし）
+  glowBlur?: number;        // フチ/文字を外側へぼかす量（グロー。>0でドロップ影より優先）
+  shadowColor?: string;     // 影の色
+  shadowBlur?: number;      // 影のぼかし＝広がり（0/未指定=くっきり）
+  shadowOffsetX?: number;   // 影の横ずれ
+  shadowOffsetY?: number;   // 影の縦ずれ
+  shadowOpacity?: number;   // 影の濃さ 0..1（未指定=1）
 }
 
 export type GaugeRender =

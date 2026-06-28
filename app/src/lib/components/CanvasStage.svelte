@@ -2,7 +2,7 @@
   import { onMount, untrack } from "svelte";
   import Konva from "konva";
   import { editor } from "$lib/editor/editorState.svelte";
-  import type { PanelItem } from "$lib/model/panel";
+  import type { PanelItem, Style } from "$lib/model/panel";
   import { itemDisplayText } from "$lib/render/draw";
   import { formatValue, splitFormat } from "$lib/render/format";
   import { formatDate } from "$lib/render/datetime";
@@ -74,10 +74,29 @@
 
   // 値+単位を描く共通処理。数値は右寄せで右端固定、単位は固定位置に置くので
   // 桁が増減しても単位（°C や %）がずれない。戻り値は値だけ更新する関数。
+  // 文字のフチ(stroke)と影(shadow)。fillAfterStrokeEnabledで塗りを上に乗せ、フチが内側を潰さない。
+  function textDecor(style: Style) {
+    // グロー(フチぼかし)優先：フチ色でオフセット0の影を焚く＝フチの形が外へボケて光る。
+    // グローOFFのときは、ぼかし or オフセット指定でドロップ影を出す（ぼかし0でもくっきり影）。
+    const hasGlow = (style.glowBlur ?? 0) > 0;
+    const hasDrop = !hasGlow && !!(style.shadowBlur || style.shadowOffsetX || style.shadowOffsetY);
+    return {
+      stroke: style.strokeWidth ? (style.strokeColor ?? "#000000") : undefined,
+      strokeWidth: style.strokeWidth ?? 0,
+      fillAfterStrokeEnabled: true,
+      shadowColor: hasGlow ? (style.strokeColor ?? style.color) : (hasDrop ? (style.shadowColor ?? "#000000") : undefined),
+      shadowBlur: hasGlow ? style.glowBlur : (style.shadowBlur ?? 0),
+      shadowOffsetX: hasGlow ? 0 : (style.shadowOffsetX ?? 0),
+      shadowOffsetY: hasGlow ? 0 : (style.shadowOffsetY ?? 0),
+      shadowOpacity: style.shadowOpacity ?? 1,
+    };
+  }
+
   function addValueUnit(g: Konva.Group, item: PanelItem, v: number, containerW: number, centered: boolean, y: number): (val: number) => void {
     const font = {
       fontFamily: item.style.fontFamily, fontSize: item.style.fontSize,
       fontStyle: item.style.fontWeight, fill: item.style.color,
+      ...textDecor(item.style),
     };
     // 値が欠落(NaN)＝センサー切断時は淡色で「データなし」を示す。Labelは固定文言なので対象外。
     const baseFill = item.style.color;
@@ -167,9 +186,10 @@
       g.add(new Konva.Line({ points: [0, item.rect.h / 2, item.rect.w, item.rect.h / 2], stroke: item.style.color, strokeWidth: item.lineWidth ?? 2, lineCap: "round" }));
     } else if (item.kind === "DateTime") {
       const t = new Konva.Text({
-        text: "", x: 0, y: 0, width: item.rect.w, align: item.style.align,
+        text: "", x: 0, y: 0, width: item.rect.w, align: item.style.align, wrap: "none",
         fontFamily: item.style.fontFamily, fontSize: item.style.fontSize,
         fontStyle: item.style.fontWeight, fill: item.style.color,
+        ...textDecor(item.style),
       });
       g.add(t);
       const fmt = item.format ?? "HH:mm:ss";
