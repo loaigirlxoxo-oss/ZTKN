@@ -2,6 +2,9 @@
   import { editor } from "$lib/editor/editorState.svelte";
   import { sensors, type LiveSensor } from "$lib/sensors/live.svelte";
   import { formatForUnit } from "$lib/render/format";
+  import { fontStore, ensureFonts } from "$lib/fonts/installed.svelte";
+
+  ensureFonts(); // インストール済みフォントを取得（多重防止済み）
 
   const item = $derived(editor.selected);
 
@@ -55,15 +58,8 @@
     <label>不透明度 <input type="range" min="0" max="1" step="0.05" bind:value={item.opacity} oninput={changed} /></label>
     <label>フォント
       <select bind:value={item.style.fontFamily} onchange={changed}>
-        <!-- Windows 標準同梱で視認差が大きいものに限定（未インストールだとフォールバックで差が出ない） -->
-        <option>Segoe UI</option>
-        <option>Arial</option>
-        <option>Consolas</option>
-        <option>Times New Roman</option>
-        <option>Comic Sans MS</option>
-        <option>Impact</option>
-        <option>Meiryo</option>
-        <option>MS Gothic</option>
+        <!-- Windows にインストール済みの全フォント（Rust の list_fonts 経由）。未取得時は FALLBACK -->
+        {#each fontStore.list as f}<option value={f}>{f}</option>{/each}
       </select>
     </label>
     <label>サイズ <input type="number" bind:value={item.style.fontSize} oninput={changed} /></label>

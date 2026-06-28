@@ -39,8 +39,9 @@
       fontStyle: item.style.fontWeight, fill: item.style.color,
     };
     const parts = splitFormat(item.format ?? "%d");
-    if (!parts || (parts.prefix === "" && parts.suffix === "")) {
-      // リテラル or 単位なしの数値 → 単一テキスト
+    // 中央寄せ（ゲージ中心など）は数値＋単位をまとめて中央配置＝常に真ん中に揃う。
+    // 単位固定の予約幅ロジックは左/右寄せ時のみ（中央寄せだと空き桁分だけ右へズレるため）。
+    if (!parts || (parts.prefix === "" && parts.suffix === "") || centered) {
       const t = new Konva.Text({ ...font, text: itemDisplayText(item, v), x: 0, y, width: containerW, align: centered ? "center" : item.style.align });
       g.add(t);
       return (val) => t.text(itemDisplayText(item, val));

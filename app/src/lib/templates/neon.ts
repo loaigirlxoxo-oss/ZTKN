@@ -11,9 +11,9 @@ export function buildNeonTemplate(): Panel {
   const bind = (type: string, kw: string[]) => pickSensor(sensors.list, type, kw)?.id;
   const unitOf = (id?: string) => sensors.list.find((s) => s.id === id)?.unit;
 
-  const label = (txt: string, x: number, y: number, size = 14, color = "#8a8") => {
+  const label = (txt: string, x: number, y: number, size = 14, color = "#8a8", w = 220, align: "left" | "center" = "left") => {
     const it = createItem("Label", { x, y });
-    it.format = txt; it.style.fontSize = size; it.style.color = color; it.rect.w = 220;
+    it.format = txt; it.style.fontSize = size; it.style.color = color; it.style.align = align; it.rect.w = w;
     return add(it);
   };
   const text = (x: number, y: number, sensor: string | undefined, size: number, color: string, w = 180, align: "left" | "center" = "left") => {
@@ -21,12 +21,6 @@ export function buildNeonTemplate(): Panel {
     it.format = formatForUnit(unitOf(sensor)); it.sensorSrc = sensor;
     it.style.fontSize = size; it.style.color = color; it.style.align = align;
     it.rect.w = w; it.rect.h = size + 8;
-    return add(it);
-  };
-  const bar = (x: number, y: number, sensor: string | undefined, color: string, grad: string, w = 280) => {
-    const it = createItem("BarH", { x, y });
-    it.rect.w = w; it.rect.h = 24; it.sensorSrc = sensor; it.range = [0, 100];
-    it.style.color = color; it.useGradient = true; it.gradColor = grad;
     return add(it);
   };
   // 丸ゲージ＝負荷、中央に負荷%／仕切り線／温度
@@ -61,37 +55,36 @@ export function buildNeonTemplate(): Panel {
 
   const WARM = "#ffb14e", COOL = "#00d2c4", GREEN = "#6af62a", PINK = "#ff3484";
 
-  // --- CPU（左）＋ DRAM（CPUの横） ---
-  label("CPU", 70, 50, 20, WARM);
-  gaugeModule(80, 90, 190, cpuLoad, cpuTemp, WARM);
-  label("DRAM", 320, 110, 18, "#ffd23f");
-  gaugeOne(310, 140, 150, dram, "#ffd23f");
+  // --- CPU（左・大）＋ DRAM（横・小）。縦中央(=270)へ寄せて下の余白を詰める ---
+  label("CPU", 50, 64, 22, WARM, 320, "center");
+  gaugeModule(50, 110, 320, cpuLoad, cpuTemp, WARM);
+  label("DRAM", 400, 120, 18, "#ffd23f", 220, "center");
+  gaugeOne(400, 160, 220, dram, "#ffd23f");
 
   // --- 中央：ネットワーク / 電力 / 時計 ---
-  label("NETWORK  ↓ / ↑", 660, 56, 14, COOL);
-  const graph = createItem("GraphLine", { x: 660, y: 84 });
-  graph.rect.w = 600; graph.rect.h = 150; graph.unit = "Kbps"; graph.autoUnit = true; graph.bgOpacity = 0.25; graph.valueScale = 8; // KB/s→Kbps
+  label("NETWORK  ↓ / ↑", 700, 50, 16, COOL);
+  const graph = createItem("GraphLine", { x: 700, y: 82 });
+  graph.rect.w = 560; graph.rect.h = 230; graph.unit = "Kbps"; graph.autoUnit = true; graph.bgOpacity = 0.25; graph.valueScale = 8; // KB/s→Kbps
   graph.graphStyle = "dual-basic"; graph.style.color = COOL; graph.color2 = PINK;
   graph.sensorSrc = netDown; graph.sensorSrc2 = netUp;
   add(graph);
-  label("TOTAL POWER", 660, 268, 14);
-  const power = createItem("SensorText", { x: 660, y: 288 });
-  power.format = "%d W"; power.style.fontSize = 48; power.style.color = "#ffffff"; power.rect.w = 240; power.rect.h = 56;
+  label("TOTAL POWER", 700, 338, 16);
+  const power = createItem("SensorText", { x: 700, y: 358 });
+  power.format = "%d W"; power.style.fontSize = 58; power.style.color = "#ffffff"; power.rect.w = 270; power.rect.h = 66;
   power.sensorSum = [cpuPower, gpuPower].filter(Boolean) as string[];
   add(power);
-  const clock = createItem("DateTime", { x: 980, y: 282 });
-  clock.format = "HH:mm:ss"; clock.style.fontSize = 52; clock.style.color = "#eee8d6"; clock.rect.w = 280;
+  const clock = createItem("DateTime", { x: 1010, y: 346 });
+  clock.format = "HH:mm:ss"; clock.style.fontSize = 64; clock.style.color = "#eee8d6"; clock.rect.w = 320;
   add(clock);
-  const date = createItem("DateTime", { x: 980, y: 350 });
-  date.format = "yyyy-MM-dd"; date.style.fontSize = 22; date.style.color = "#9aa"; date.rect.w = 220;
+  const date = createItem("DateTime", { x: 1010, y: 422 });
+  date.format = "yyyy-MM-dd"; date.style.fontSize = 24; date.style.color = "#9aa"; date.rect.w = 240;
   add(date);
 
-  // --- GPU（右） ---
-  label("GPU", 1640, 50, 20, COOL);
-  gaugeModule(1650, 90, 190, gpuLoad, gpuTemp, COOL);
-  label("VRAM", 1540, 320, 14);
-  bar(1540, 342, vram, "#8652ff", "#ff3484", 300);
-  text(1852, 340, vram, 22, "#ccc", 60);
+  // --- VRAM（小）＋ GPU（右・大）。中央列(700-1260)を避け、右マージンを左と対称に ---
+  label("VRAM", 1300, 120, 18, "#b07cff", 220, "center");
+  gaugeOne(1300, 160, 220, vram, "#b07cff");
+  label("GPU", 1550, 64, 22, COOL, 320, "center");
+  gaugeModule(1550, 110, 320, gpuLoad, gpuTemp, COOL);
 
   panel.items = items;
   return panel;

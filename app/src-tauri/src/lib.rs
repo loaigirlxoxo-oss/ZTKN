@@ -203,6 +203,36 @@ fn list_asset_sets() -> Result<Vec<AssetSet>, String> {
     Ok(sets)
 }
 
+// Windows にインストール済みのフォントファミリ名を全列挙する。
+// GDI+ の InstalledFontCollection を PowerShell 経由で読む（依存クレート追加なし）。
+// 日本語フォント名が化けないよう出力エンコーディングを UTF-8 に固定する。
+#[tauri::command]
+fn list_fonts() -> Vec<String> {
+    let script = "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; \
+        Add-Type -AssemblyName System.Drawing; \
+        (New-Object System.Drawing.Text.InstalledFontCollection).Families | ForEach-Object { $_.Name }";
+    let mut cmd = Command::new("powershell");
+    cmd.args(["-NoProfile", "-NonInteractive", "-Command", script]);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW: コンソールの一瞬の表示を抑止
+    }
+    match cmd.output() {
+        Ok(o) => {
+            let mut v: Vec<String> = String::from_utf8_lossy(&o.stdout)
+                .lines()
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect();
+            v.sort();
+            v.dedup();
+            v
+        }
+        Err(_) => vec![],
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -214,7 +244,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             greet, save_panel, load_panel, read_text_file, list_dir_images,
-            assets_root, open_assets_dir, list_asset_sets
+            assets_root, open_assets_dir, list_asset_sets, list_fonts
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
