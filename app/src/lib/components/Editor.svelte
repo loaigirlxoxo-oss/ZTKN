@@ -8,6 +8,7 @@
   import { sensors } from "$lib/sensors/live.svelte";
   import { savePanel, loadPanel } from "$lib/editor/persist";
   import { templates } from "$lib/templates";
+  import { view } from "$lib/editor/view.svelte";
 
   let msg = $state("");
   let showAssets = $state(true);
@@ -79,6 +80,7 @@
     <button onclick={() => editor.undo()} disabled={!editor.canUndo} title="元に戻す (Ctrl+Z)">↶</button>
     <button onclick={() => editor.redo()} disabled={!editor.canRedo} title="やり直し (Ctrl+Y)">↷</button>
     <button onclick={() => (showAssets = !showAssets)}>アセット{showAssets ? "▼" : "▲"}</button>
+    <button onclick={() => (view.present = true)} title="フルスクリーン表示（Escで戻る）">▶ 表示</button>
     <select title="テンプレを選んで読み込む" onchange={(e) => { const v = e.currentTarget.value; if (v !== "") loadTemplate(+v); e.currentTarget.value = ""; }}>
       <option value="">テンプレ…</option>
       {#each templates as t, i}<option value={i}>{t.name}</option>{/each}

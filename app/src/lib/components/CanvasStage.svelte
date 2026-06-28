@@ -11,8 +11,19 @@
   import { getImage, loadImage } from "$lib/render/images";
   import { snap } from "$lib/editor/snap";
 
+  // present=表示専用（ドラッグ/選択/Transformer無効・ウィンドウにフィット）
+  let { present = false }: { present?: boolean } = $props();
+
   let container: HTMLDivElement;
   let stage: Konva.Stage | undefined = $state();
+  // 表示専用のフィット倍率（ウィンドウにアスペクト維持で収める）。編集時は editor.zoom を使う。
+  let fitScale = $state(1);
+  const viewScale = (): number => (present ? fitScale : editor.zoom);
+  function recomputeFit(): void {
+    if (!present) return;
+    const sw = window.innerWidth, sh = window.innerHeight;
+    fitScale = Math.max(0.05, Math.min(sw / editor.panel.size.w, sh / editor.panel.size.h));
+  }
   let layer: Konva.Layer;
   let tr: Konva.Transformer;
   const groups = new Map<string, Konva.Group>();
@@ -99,7 +110,7 @@
     const g = new Konva.Group({
       x: item.rect.x + cx, y: item.rect.y + cy, offsetX: cx, offsetY: cy,
       width: item.rect.w, height: item.rect.h,
-      rotation: item.rotation, opacity: item.opacity, id: item.id, draggable: true,
+      rotation: item.rotation, opacity: item.opacity, id: item.id, draggable: !present,
     });
     // 透明なヒット領域：枠内どこでもクリックで選択できる（中空ゲージ/余白/小さい表示でも当たる）
     g.add(new Konva.Rect({ width: item.rect.w, height: item.rect.h, fill: "rgba(0,0,0,0)" }));
@@ -276,7 +287,7 @@
       updaters.set(item.id, () => apply()); // 値は履歴から読むので引数は使わない
     }
 
-    wireNode(g, item);
+    if (!present) wireNode(g, item); // 表示専用は選択/ドラッグを付けない
     return g;
   }
 
@@ -309,6 +320,7 @@
   }
 
   function attachTransformer(): void {
+    if (present || !tr) return; // 表示専用は Transformer なし
     const g = editor.selectedId ? groups.get(editor.selectedId) : undefined;
     tr.nodes(g ? [g] : []);
   }
@@ -336,21 +348,30 @@
       groups.set(item.id, g);
       layer.add(g);
     }
-    // Transformer は最前面（ハンドルがアイテムに隠れないように）
-    tr = new Konva.Transformer({ rotateEnabled: true, rotationSnaps: [0, 90, 180, 270], ignoreStroke: true });
-    layer.add(tr);
-    attachTransformer();
+    // Transformer は最前面（ハンドルがアイテムに隠れないように）。表示専用では作らない
+    if (!present) {
+      tr = new Konva.Transformer({ rotateEnabled: true, rotationSnaps: [0, 90, 180, 270], ignoreStroke: true });
+      layer.add(tr);
+      attachTransformer();
+    }
     applyValues();
     layer.draw();
   }
 
   onMount(() => {
-    stage = new Konva.Stage({ container, width: editor.panel.size.w * editor.zoom, height: editor.panel.size.h * editor.zoom });
-    stage.scale({ x: editor.zoom, y: editor.zoom });
+    recomputeFit();
+    const z = viewScale();
+    stage = new Konva.Stage({ container, width: editor.panel.size.w * z, height: editor.panel.size.h * z });
+    stage.scale({ x: z, y: z });
     layer = new Konva.Layer();
     stage.add(layer);
-    stage.on("mousedown touchstart", (e) => { if (e.target === stage) editor.selectedId = null; });
+    if (!present) stage.on("mousedown touchstart", (e) => { if (e.target === stage) editor.selectedId = null; });
     rebuild();
+    if (present) {
+      const onResize = () => { recomputeFit(); };
+      window.addEventListener("resize", onResize);
+      return () => window.removeEventListener("resize", onResize);
+    }
   });
 
   // 構造変更（追加/削除/リサイズ/プロパティ）だけで作り直す。
@@ -361,15 +382,23 @@
   $effect(() => { editor.selectedId; if (stage) untrack(() => { attachTransformer(); layer.batchDraw(); }); });
   // 値更新（1秒）は動的部分だけ更新（構造・サイズは維持）
   $effect(() => { editor.values; if (stage) untrack(() => applyValues()); });
-  // パネルサイズ・表示倍率の変更で Konva ステージをリサイズ＆スケール
+  // パネルサイズ・表示倍率（編集=editor.zoom / 表示=fitScale）の変更でステージをリサイズ＆スケール
   $effect(() => {
-    const w = editor.panel.size.w, h = editor.panel.size.h, z = editor.zoom;
+    const w = editor.panel.size.w, h = editor.panel.size.h;
+    const z = present ? fitScale : editor.zoom; // 依存にどちらも載せる
     if (stage) untrack(() => { stage!.size({ width: w * z, height: h * z }); stage!.scale({ x: z, y: z }); });
   });
 </script>
 
-<div bind:this={container} class="stage" style="width:{editor.panel.size.w * editor.zoom}px;height:{editor.panel.size.h * editor.zoom}px"></div>
+<div
+  bind:this={container}
+  class="stage"
+  class:present
+  style="width:{editor.panel.size.w * (present ? fitScale : editor.zoom)}px;height:{editor.panel.size.h * (present ? fitScale : editor.zoom)}px"
+></div>
 
 <style>
   .stage { background: #0a0a0a; border: 1px solid #222; }
+  /* 表示専用は枠なし・黒地（背景に溶け込ませる） */
+  .stage.present { border: none; background: #000; }
 </style>
