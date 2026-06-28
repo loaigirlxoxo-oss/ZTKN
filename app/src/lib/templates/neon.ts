@@ -39,6 +39,13 @@ export function buildNeonTemplate(): Panel {
     ln.rect.w = size * 0.40; ln.rect.h = 4; ln.style.color = "#cccccc"; ln.lineWidth = 1; add(ln);
     text(x, y + size * 0.55, tempSensor, size * 0.18, "#eee8d6", size, "center");
   };
+  // 丸ゲージ＝1値（中央に数値のみ）
+  const gaugeOne = (x: number, y: number, size: number, sensor: string | undefined, color: string) => {
+    const g = createItem("Gauge", { x, y });
+    g.rect.w = size; g.rect.h = size; g.sensorSrc = sensor; g.range = [0, 100]; g.style.color = color; g.format = "%d";
+    add(g);
+    text(x, y + size * 0.37, sensor, size * 0.24, "#eee8d6", size, "center");
+  };
 
   // --- センサーを実機にバインド ---
   const cpuTemp = bind("Temperature", ["CPU パッケージ", "CPU Package", "パッケージ"]);
@@ -54,12 +61,11 @@ export function buildNeonTemplate(): Panel {
 
   const WARM = "#ffb14e", COOL = "#00d2c4", GREEN = "#6af62a", PINK = "#ff3484";
 
-  // --- CPU（左） ---
+  // --- CPU（左）＋ DRAM（CPUの横） ---
   label("CPU", 70, 50, 20, WARM);
   gaugeModule(80, 90, 190, cpuLoad, cpuTemp, WARM);
-  label("DRAM", 70, 320, 14);
-  bar(70, 342, dram, "#ffd23f", "#ff5a3c", 300);
-  text(382, 340, dram, 22, "#ccc", 90);
+  label("DRAM", 320, 110, 18, "#ffd23f");
+  gaugeOne(310, 140, 150, dram, "#ffd23f");
 
   // --- 中央：ネットワーク / 電力 / 時計 ---
   label("NETWORK  ↓ / ↑", 660, 56, 14, COOL);
