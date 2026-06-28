@@ -40,6 +40,7 @@
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === "INPUT" || t.tagName === "SELECT" || t.tagName === "TEXTAREA")) return;
+      if (e.key === "Escape") { e.preventDefault(); editor.clearSelection(); return; } // 選択解除（密なレイアウトでも確実に消せる）
       const ctrl = e.ctrlKey || e.metaKey;
       const k = e.key.toLowerCase();
       if (ctrl && k === "z") { e.preventDefault(); if (e.shiftKey) editor.redo(); else editor.undo(); return; }

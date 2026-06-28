@@ -89,7 +89,7 @@
     // 中央寄せ（ゲージ中心など）は数値＋単位をまとめて中央配置＝常に真ん中に揃う。
     // 単位固定の予約幅ロジックは左/右寄せ時のみ（中央寄せだと空き桁分だけ右へズレるため）。
     if (!parts || (parts.prefix === "" && parts.suffix === "") || centered) {
-      const t = new Konva.Text({ ...font, text: itemDisplayText(item, v), x: 0, y, width: containerW, align: centered ? "center" : item.style.align });
+      const t = new Konva.Text({ ...font, text: itemDisplayText(item, v), x: 0, y, width: containerW, align: centered ? "center" : item.style.align, wrap: "none" });
       g.add(t);
       return (val) => { t.text(itemDisplayText(item, val)); t.fill(tintFor(val)); };
     }
@@ -106,7 +106,7 @@
     const blockStart = centered ? Math.max(0, (containerW - (prefixW + reserve + suffixW)) / 2) : 0;
     const prefixNode = parts.prefix ? new Konva.Text({ ...font, text: parts.prefix, x: blockStart, y }) : null;
     if (prefixNode) g.add(prefixNode);
-    const valueNode = new Konva.Text({ ...font, text: formatValue(parts.token, v), x: blockStart + prefixW, y, width: reserve, align: "right" });
+    const valueNode = new Konva.Text({ ...font, text: formatValue(parts.token, v), x: blockStart + prefixW, y, width: reserve, align: "right", wrap: "none" });
     g.add(valueNode);
     const suffixNode = parts.suffix ? new Konva.Text({ ...font, text: parts.suffix, x: blockStart + prefixW + reserve, y }) : null;
     if (suffixNode) g.add(suffixNode);
@@ -481,31 +481,16 @@
     stage.scale({ x: z, y: z });
     layer = new Konva.Layer();
     stage.add(layer);
+    let detachWinUp: (() => void) | undefined;
     if (!present) {
       // 空き領域ドラッグ＝ラバーバンド選択。クリック（動かさず）＝選択解除。
       const st = stage; // クロージャ用に非null参照を固定
       let selRect: Konva.Rect | null = null;
       let startPos: { x: number; y: number } | null = null;
       const baseIds: string[] = []; // Shift追加選択の起点
-      st.on("mousedown", (e) => {
-        if (e.target !== st) return; // アイテム上は wireNode が処理
-        const p = st.getRelativePointerPosition(); if (!p) return;
-        startPos = p;
-        const shift = !!(e.evt as MouseEvent)?.shiftKey;
-        baseIds.length = 0;
-        if (shift) baseIds.push(...editor.selectedIds);
-        else editor.clearSelection();
-        selRect = new Konva.Rect({ x: p.x, y: p.y, width: 0, height: 0, fill: "rgba(0,210,196,0.12)", stroke: "#00d2c4", strokeWidth: 1 });
-        layer.add(selRect); selRect.moveToTop();
-      });
-      st.on("mousemove", () => {
-        if (!selRect || !startPos) return;
-        const p = st.getRelativePointerPosition(); if (!p) return;
-        selRect.setAttrs({ x: Math.min(startPos.x, p.x), y: Math.min(startPos.y, p.y), width: Math.abs(p.x - startPos.x), height: Math.abs(p.y - startPos.y) });
-        layer.batchDraw();
-      });
-      st.on("mouseup", () => {
-        if (!selRect || !startPos) { startPos = null; return; }
+      // 選択枠を片付ける。キャンバス内/外どちらで離しても必ず呼ぶ＝取り残し防止。
+      const finishRubber = () => {
+        if (!selRect) { startPos = null; return; }
         const box: Box = { x: selRect.x(), y: selRect.y(), w: selRect.width(), h: selRect.height() };
         selRect.destroy(); selRect = null;
         if (box.w > 3 || box.h > 3) {
@@ -514,14 +499,38 @@
         }
         startPos = null;
         layer.batchDraw();
+      };
+      st.on("mousedown", (e) => {
+        if (e.target !== st) return; // アイテム上は wireNode が処理
+        const p = st.getRelativePointerPosition(); if (!p) return;
+        startPos = p;
+        const shift = !!(e.evt as MouseEvent)?.shiftKey;
+        baseIds.length = 0;
+        if (shift) baseIds.push(...editor.selectedIds);
+        else editor.clearSelection();
+        selRect = new Konva.Rect({ x: p.x, y: p.y, width: 0, height: 0, fill: "rgba(0,210,196,0.12)", stroke: "#00d2c4", strokeWidth: 1, listening: false });
+        layer.add(selRect); selRect.moveToTop();
       });
+      st.on("mousemove", () => {
+        if (!selRect || !startPos) return;
+        const p = st.getRelativePointerPosition(); if (!p) return;
+        selRect.setAttrs({ x: Math.min(startPos.x, p.x), y: Math.min(startPos.y, p.y), width: Math.abs(p.x - startPos.x), height: Math.abs(p.y - startPos.y) });
+        layer.batchDraw();
+      });
+      st.on("mouseup", finishRubber);
+      // キャンバス外でマウスを離しても選択枠を取り残さない
+      const onWinUp = () => finishRubber();
+      window.addEventListener("mouseup", onWinUp);
+      detachWinUp = () => window.removeEventListener("mouseup", onWinUp);
     }
     rebuild();
+    let detachResize: (() => void) | undefined;
     if (present) {
       const onResize = () => { recomputeFit(); };
       window.addEventListener("resize", onResize);
-      return () => window.removeEventListener("resize", onResize);
+      detachResize = () => window.removeEventListener("resize", onResize);
     }
+    return () => { detachWinUp?.(); detachResize?.(); };
   });
 
   // 構造変更（追加/削除/リサイズ/プロパティ）だけで作り直す。
