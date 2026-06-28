@@ -112,12 +112,21 @@ struct AssetSet {
 }
 
 fn assets_dir() -> PathBuf {
-    let mut d = std::env::current_exe()
-        .ok()
-        .and_then(|p| p.parent().map(|x| x.to_path_buf()))
-        .unwrap_or_else(|| PathBuf::from("."));
-    d.push("Assets");
-    d
+    if cfg!(debug_assertions) {
+        // dev: プロジェクトの app/ 直下（target/debug の奥ではなく分かりやすい場所、cargo cleanでも消えない）
+        let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR")); // .../app/src-tauri
+        d.pop(); // .../app
+        d.push("Assets");
+        d
+    } else {
+        // 製品: インストール済み exe の隣（アプリフォルダ直下）
+        let mut d = std::env::current_exe()
+            .ok()
+            .and_then(|p| p.parent().map(|x| x.to_path_buf()))
+            .unwrap_or_else(|| PathBuf::from("."));
+        d.push("Assets");
+        d
+    }
 }
 
 fn is_image(p: &std::path::Path) -> bool {
