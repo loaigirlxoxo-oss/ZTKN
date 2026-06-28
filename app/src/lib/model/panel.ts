@@ -33,6 +33,7 @@ export interface PanelItem {
   unit?: string;              // グラフ等のスケール表示に付ける単位（例 "Mbps"）
   autoUnit?: boolean;         // グラフ単位をスケールに応じ自動換算するか（false=入力した単位を固定）
   showScale?: boolean;        // グラフの目盛りラベル＋グリッド線を表示するか
+  graphStyle?: "line" | "filled" | "dots" | "spike"; // 線グラフの描画スタイル
   bgColor?: string;           // 背景色（グラフ/バー/ゲージのトラック）
   bgOpacity?: number;         // 背景の不透明度 0..1（0=透過）。全体opacityとは独立
   frameColor?: string;        // 枠（境界線）の色。本体色とは独立

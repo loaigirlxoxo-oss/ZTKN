@@ -152,8 +152,43 @@
           g.add(new Konva.Line({ points: [0, gy, w, gy], stroke: "#3a3a3a", strokeWidth: 1, opacity: 0.7 }));
         }
       }
-      const line = new Konva.Line({ points: [], stroke: item.style.color, strokeWidth: 1.5, lineJoin: "round", lineCap: "round" });
-      g.add(line);
+      const gstyle = item.graphStyle ?? "line";
+      const gcolor = item.style.color;
+      const graph = new Konva.Shape({
+        sceneFunc: (ctx, shp) => {
+          const c = (ctx as unknown as { _context: CanvasRenderingContext2D })._context;
+          const pts = shp.getAttr("pts") as number[] | undefined;
+          if (!pts || pts.length < 4) return;
+          if (gstyle === "dots") {
+            c.beginPath();
+            for (let i = 0; i < pts.length; i += 2) { c.moveTo(pts[i] + 1.6, pts[i + 1]); c.arc(pts[i], pts[i + 1], 1.6, 0, Math.PI * 2); }
+            c.fillStyle = gcolor; c.fill();
+            return;
+          }
+          if (gstyle === "spike") {
+            c.beginPath();
+            for (let i = 0; i < pts.length; i += 2) { c.moveTo(pts[i], h); c.lineTo(pts[i], pts[i + 1]); }
+            c.strokeStyle = gcolor; c.lineWidth = 1; c.stroke();
+            return;
+          }
+          // line（clean-wave）/ filled（filled-scan）
+          if (gstyle === "filled") {
+            c.beginPath();
+            c.moveTo(pts[0], pts[1]);
+            for (let i = 2; i < pts.length; i += 2) c.lineTo(pts[i], pts[i + 1]);
+            c.lineTo(pts[pts.length - 2], h);
+            c.lineTo(pts[0], h);
+            c.closePath();
+            c.globalAlpha = 0.25; c.fillStyle = gcolor; c.fill(); c.globalAlpha = 1;
+          }
+          c.beginPath();
+          c.moveTo(pts[0], pts[1]);
+          for (let i = 2; i < pts.length; i += 2) c.lineTo(pts[i], pts[i + 1]);
+          c.lineJoin = "round"; c.lineCap = "round";
+          c.strokeStyle = gcolor; c.lineWidth = 1.5; c.stroke();
+        },
+      });
+      g.add(graph);
       const scaleFont = { fontFamily: item.style.fontFamily, fontSize: 11, fill: "#9aa" };
       const topLabel = showScale ? new Konva.Text({ ...scaleFont, x: 3, y: 2, text: "" }) : null;
       const midLabel = showScale ? new Konva.Text({ ...scaleFont, x: 3, y: h / 2 - 13, text: "" }) : null;
@@ -164,7 +199,7 @@
       const fmt = (n: number) => (Math.abs(n) >= 100 ? String(Math.round(n)) : n.toFixed(1));
       const apply = () => {
         const hist = item.sensorSrc ? (editor.history.get(item.sensorSrc) ?? []) : [];
-        line.points(historyToPoints(hist, w, h, item.range));
+        graph.setAttr("pts", historyToPoints(hist, w, h, item.range));
         if (!showScale) return;
         const [mn, mx] = graphScale(hist, item.range);
         // 表示単位：自動ON ならスケール上限に追従(Kbps↔Mbps↔Gbps)、OFF なら入力単位を固定

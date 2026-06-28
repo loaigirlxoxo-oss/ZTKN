@@ -8,9 +8,11 @@
   onMount(() => { library.refresh(); });
 
   // GUI表示用のカテゴリ推測（フォルダ名から。フォルダ自体はいじらない）
-  type Cat = "bg" | "round" | "bar" | "other";
+  type Cat = "bg" | "round" | "bar" | "graph" | "other";
   function cat(name: string): Cat {
     const n = name.toLowerCase();
+    // 単一線グラフ（network/line-graph-assets/Single/...）。dualは Phase B でその他扱い
+    if (n.includes("line-graph") && n.includes("single")) return "graph";
     if (n.includes("background") || n.includes("backdrop") || /(^|\/)bg(\/|$)/.test(n)) return "bg";
     if (n.includes("round") || n.includes("circle") || n.includes("dial")) return "round";
     if (n.includes("horizontal") || n.includes("bar")) return "bar";
@@ -19,7 +21,39 @@
   const bgSets = $derived(library.sets.filter((s) => cat(s.name) === "bg"));
   const roundSets = $derived(library.sets.filter((s) => cat(s.name) === "round"));
   const barSets = $derived(library.sets.filter((s) => cat(s.name) === "bar"));
+  const graphSets = $derived(library.sets.filter((s) => cat(s.name) === "graph"));
   const otherSets = $derived(library.sets.filter((s) => cat(s.name) === "other"));
+
+  // 線グラフスタイル: フォルダ名→スタイル、ファイル名→色
+  const GRAPH_COLORS: Record<string, string> = {
+    cream: "#eee8d6", cyan: "#00d2c4", lime: "#6af62a", pink: "#ff3484", purple: "#8652ff", yellow: "#f4d35e",
+  };
+  function styleFromName(name: string): "line" | "filled" | "dots" | "spike" {
+    const n = name.toLowerCase();
+    if (n.includes("dot-matrix")) return "dots";
+    if (n.includes("filled-scan")) return "filled";
+    if (n.includes("spike-trace")) return "spike";
+    return "line";
+  }
+  function colorFromFile(path: string): string {
+    const f = path.toLowerCase();
+    for (const [name, hex] of Object.entries(GRAPH_COLORS)) if (f.includes(name)) return hex;
+    return "#00d2c4";
+  }
+
+  // 線グラフのスタイル＋色を選択中GraphLineへ適用（未選択なら新規）
+  function applyGraph(file: string, setName: string): void {
+    let item = editor.selected;
+    if (!item || item.kind !== "GraphLine") {
+      item = createItem("GraphLine", { x: 80, y: 80 });
+      item.rect.w = 340; item.rect.h = 112; item.unit = "B/s"; item.autoUnit = true; item.bgOpacity = 0.2;
+      editor.panel.items.push(item);
+      editor.selectedId = item.id;
+    }
+    item.graphStyle = styleFromName(setName);
+    item.style.color = colorFromFile(file);
+    editor.bumpStructure();
+  }
 
   const leaf = (name: string) => name.split("/").pop() ?? name;
   const thumb = (s: AssetSet) => s.files[Math.floor(s.files.length / 2)] ?? s.files[0];
@@ -66,6 +100,24 @@
       </div>
     {/if}
 
+    {#if graphSets.length}
+      <section>
+        <div class="label">線グラフ（選択中の線グラフにスタイル＋色を適用）</div>
+        {#each graphSets as s}
+          <div class="subgroup">
+            <span class="sub">{leaf(s.name)}</span>
+            <div class="grid">
+              {#each s.files as f}
+                <button class="cell wide" title="{leaf(s.name)} / {f.split('/').pop()}" onclick={() => applyGraph(f, s.name)}>
+                  <img src={convertFileSrc(f)} alt="graph" />
+                </button>
+              {/each}
+            </div>
+          </div>
+        {/each}
+      </section>
+    {/if}
+
     {#each [{ t: "背景", sets: bgSets, bg: true }, { t: "丸ゲージ", sets: roundSets, bg: false }, { t: "横バー", sets: barSets, bg: false }, { t: "その他", sets: otherSets, bg: false }] as group}
       {#if group.sets.length}
         <section>
@@ -103,6 +155,8 @@
   .scroll { flex: 1 1 auto; overflow-y: auto; padding: 4px 8px 10px; }
   section { margin: 2px 0 8px; }
   .label { font-size: 11px; color: #7d8; margin: 6px 0 3px; position: sticky; top: 0; background: #141414; padding: 2px 0; }
+  .subgroup { margin: 2px 0 4px; }
+  .sub { font-size: 10px; color: #889; }
   .grid { display: flex; flex-wrap: wrap; gap: 6px; }
   .cell { padding: 2px; background: #1c1c1c; border: 1px solid #333; cursor: pointer; display: flex; flex-direction: column; align-items: center; overflow: hidden; }
   .cell:hover { border-color: #00ffcc; }
