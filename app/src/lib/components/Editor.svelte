@@ -81,5 +81,5 @@
   .msg { color: #00ffcc; font-size: 12px; }
   .editor { display: flex; align-items: flex-start; flex: 1 1 auto; min-height: 0; }
   .canvas-wrap { flex: 1; padding: 16px; overflow: auto; height: 100%; }
-  .drawer { flex: 0 0 auto; max-height: 210px; }
+  .drawer { flex: 0 0 38vh; min-height: 0; }
 </style>
