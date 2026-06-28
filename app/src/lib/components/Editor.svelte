@@ -10,6 +10,15 @@
 
   let msg = $state("");
   let showAssets = $state(true);
+  let wrapEl: HTMLDivElement | undefined = $state();
+
+  // 表示倍率をビューポートに合わせる
+  function fitZoom(): void {
+    if (!wrapEl) return;
+    const zw = (wrapEl.clientWidth - 32) / editor.panel.size.w;
+    const zh = (wrapEl.clientHeight - 32) / editor.panel.size.h;
+    editor.zoom = Math.max(0.1, Math.min(zw, zh));
+  }
 
   // キーボードショートカット（フォーム入力中はネイティブに任せる）
   onMount(() => {
@@ -65,13 +74,25 @@
     <label class="size">レイアウト幅 <input type="number" min="100" bind:value={editor.panel.size.w} /></label>
     <label class="size">高さ <input type="number" min="100" bind:value={editor.panel.size.h} /></label>
     <span class="sep">|</span>
+    <label class="size">表示
+      <select bind:value={editor.zoom}>
+        <option value={0.25}>25%</option>
+        <option value={0.5}>50%</option>
+        <option value={0.75}>75%</option>
+        <option value={1}>100%</option>
+        <option value={1.5}>150%</option>
+        <option value={2}>200%</option>
+      </select>
+    </label>
+    <button onclick={fitZoom}>フィット</button>
+    <span class="sep">|</span>
     <span class="sensor-status">🌡 {sensors.status}</span>
     <span class="msg">{msg}</span>
   </div>
 
   <div class="editor">
     <Palette />
-    <div class="canvas-wrap"><CanvasStage /></div>
+    <div class="canvas-wrap" bind:this={wrapEl}><CanvasStage /></div>
     <Properties />
   </div>
 

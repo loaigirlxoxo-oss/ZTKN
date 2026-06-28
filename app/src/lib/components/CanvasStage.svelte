@@ -310,7 +310,8 @@
   }
 
   onMount(() => {
-    stage = new Konva.Stage({ container, width: editor.panel.size.w, height: editor.panel.size.h });
+    stage = new Konva.Stage({ container, width: editor.panel.size.w * editor.zoom, height: editor.panel.size.h * editor.zoom });
+    stage.scale({ x: editor.zoom, y: editor.zoom });
     layer = new Konva.Layer();
     stage.add(layer);
     stage.on("mousedown touchstart", (e) => { if (e.target === stage) editor.selectedId = null; });
@@ -325,11 +326,14 @@
   $effect(() => { editor.selectedId; if (stage) untrack(() => { attachTransformer(); layer.batchDraw(); }); });
   // 値更新（1秒）は動的部分だけ更新（構造・サイズは維持）
   $effect(() => { editor.values; if (stage) untrack(() => applyValues()); });
-  // パネル（レイアウト）サイズ変更で Konva ステージをリサイズ
-  $effect(() => { const w = editor.panel.size.w, h = editor.panel.size.h; if (stage) untrack(() => stage!.size({ width: w, height: h })); });
+  // パネルサイズ・表示倍率の変更で Konva ステージをリサイズ＆スケール
+  $effect(() => {
+    const w = editor.panel.size.w, h = editor.panel.size.h, z = editor.zoom;
+    if (stage) untrack(() => { stage!.size({ width: w * z, height: h * z }); stage!.scale({ x: z, y: z }); });
+  });
 </script>
 
-<div bind:this={container} class="stage" style="width:{editor.panel.size.w}px;height:{editor.panel.size.h}px"></div>
+<div bind:this={container} class="stage" style="width:{editor.panel.size.w * editor.zoom}px;height:{editor.panel.size.h * editor.zoom}px"></div>
 
 <style>
   .stage { background: #0a0a0a; border: 1px solid #222; }

@@ -10,6 +10,8 @@ class EditorState {
   history = new Map<string, number[]>();
   // 構造変更（追加/削除/プロパティ変更/リサイズ）を Konva 再描画へ伝える手動トリガ
   structureVersion = $state(0);
+  // 表示倍率（キャンバスの見た目ズーム。パネル座標は不変）
+  zoom = $state(1);
 
   // Undo/Redo（パネルのJSONスナップショット履歴）
   canUndo = $state(false);
