@@ -9,7 +9,6 @@
   import { valueToFraction } from "$lib/render/gauge";
   import { historyToPoints, graphScale, autoRateUnit } from "$lib/render/graph";
   import { getImage, loadImage } from "$lib/render/images";
-  import { snap } from "$lib/editor/snap";
 
   // present=表示専用（ドラッグ/選択/Transformer無効・ウィンドウにフィット）
   let { present = false }: { present?: boolean } = $props();
@@ -24,9 +23,40 @@
     const sw = window.innerWidth, sh = window.innerHeight;
     fitScale = Math.max(0.05, Math.min(sw / editor.panel.size.w, sh / editor.panel.size.h));
   }
+
+  // 矩形交差判定（ラバーバンド選択用）
+  type Box = { x: number; y: number; w: number; h: number };
+  const rectsIntersect = (a: Box, b: Box): boolean =>
+    a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+
+  // --- スマートアラインガイド（PowerPoint風）。ドラッグ中に他アイテム/キャンバスの端・中央へ吸着し線を表示 ---
+  let guideV: Konva.Line | undefined; // 縦ガイド線
+  let guideH: Konva.Line | undefined; // 横ガイド線
+  const showGuide = (l: Konva.Line | undefined, pts: number[]): void => { if (l) { l.points(pts); l.visible(true); l.moveToTop(); } };
+  const hideGuide = (l: Konva.Line | undefined): void => { l?.visible(false); };
+  function buildGuideTargets(exclude: Set<string>): { vx: number[]; hy: number[] } {
+    const W = editor.panel.size.w, H = editor.panel.size.h;
+    const vx = [0, W / 2, W], hy = [0, H / 2, H]; // キャンバスの端と中央
+    for (const it of editor.panel.items) {
+      if (exclude.has(it.id)) continue;
+      vx.push(it.rect.x, it.rect.x + it.rect.w / 2, it.rect.x + it.rect.w);
+      hy.push(it.rect.y, it.rect.y + it.rect.h / 2, it.rect.y + it.rect.h);
+    }
+    return { vx, hy };
+  }
+  // 3辺(左/中央/右 or 上/中央/下)のいずれかが、ターゲット線に閾値内なら最寄りへ吸着する量を返す
+  function nearestSnap(edges: number[], lines: number[], thr: number): { delta: number; line: number } | null {
+    let best: { delta: number; line: number } | null = null;
+    for (const e of edges) for (const ln of lines) {
+      const d = ln - e;
+      if (Math.abs(d) <= thr && (!best || Math.abs(d) < Math.abs(best.delta))) best = { delta: d, line: ln };
+    }
+    return best;
+  }
   let layer: Konva.Layer;
   let tr: Konva.Transformer;
   const groups = new Map<string, Konva.Group>();
+  const outlines = new Map<string, Konva.Rect>(); // 複数選択時に各オブジェクトへ出す点線枠
   const updaters = new Map<string, (v: number) => void>(); // 値だけ更新する関数
 
   function valueFor(item: PanelItem): number {
@@ -304,12 +334,62 @@
   }
 
   function wireNode(g: Konva.Group, item: PanelItem): void {
-    g.on("mousedown touchstart", (e) => { e.cancelBubble = true; editor.selectedId = item.id; });
+    g.on("mousedown touchstart", (e) => {
+      e.cancelBubble = true; // ステージへ伝播させない（ラバーバンド開始を防ぐ）
+      const additive = !!(e.evt as MouseEvent)?.shiftKey || !!(e.evt as MouseEvent)?.ctrlKey;
+      if (additive) editor.toggleSelect(item.id);
+      else if (!editor.selectedIds.includes(item.id)) editor.selectOnly(item.id);
+      // 既に選択済みを通常クリック＝選択維持（複数選択のままグループドラッグできる）
+    });
+    // ドラッグ開始時に「一緒に動かすメンバー」の開始位置を記録（複数選択ならその全員）
+    let dragStart: Map<string, { x: number; y: number }> | null = null;
+    let guideTargets: { vx: number[]; hy: number[] } | null = null;
+    g.on("dragstart", () => {
+      const ids = editor.selectedIds.includes(item.id) && editor.selectedIds.length > 1 ? editor.selectedIds : [item.id];
+      dragStart = new Map();
+      for (const id of ids) { const ng = groups.get(id); if (ng) dragStart.set(id, { x: ng.x(), y: ng.y() }); }
+      // 単一ドラッグのみスマートガイドを使う（自分自身は吸着対象から除外）
+      guideTargets = ids.length === 1 ? buildGuideTargets(new Set(ids)) : null;
+    });
+    g.on("dragmove", () => {
+      const w = item.rect.w, h = item.rect.h;
+      let tlx = g.x() - w / 2, tly = g.y() - h / 2;
+      if (guideTargets) {
+        const thr = 6 / editor.zoom; // 画面上で約6px
+        const sx = nearestSnap([tlx, tlx + w / 2, tlx + w], guideTargets.vx, thr);
+        const sy = nearestSnap([tly, tly + h / 2, tly + h], guideTargets.hy, thr);
+        if (sx) { tlx += sx.delta; showGuide(guideV, [sx.line, 0, sx.line, editor.panel.size.h]); } else hideGuide(guideV);
+        if (sy) { tly += sy.delta; showGuide(guideH, [0, sy.line, editor.panel.size.w, sy.line]); } else hideGuide(guideH);
+        g.position({ x: tlx + w / 2, y: tly + h / 2 });
+      }
+      // 複数選択は全員を同じ差分で移動（ガイドなし）
+      const s = dragStart?.get(item.id);
+      if (dragStart && dragStart.size > 1 && s) {
+        const dx = g.x() - s.x, dy = g.y() - s.y;
+        for (const [id, p] of dragStart) {
+          const nx = p.x + dx, ny = p.y + dy;
+          if (id !== item.id) groups.get(id)?.position({ x: nx, y: ny });
+          outlines.get(id)?.position({ x: nx, y: ny });
+        }
+      } else {
+        outlines.get(item.id)?.position({ x: g.x(), y: g.y() });
+      }
+      tr?.forceUpdate(); // 単一選択時はハンドルを追従
+      layer.batchDraw();
+    });
     g.on("dragend", () => {
-      // offset=中心なので g.x()/y() は中心。rect は左上で持つ。
-      item.rect.x = snap(g.x() - item.rect.w / 2, 5);
-      item.rect.y = snap(g.y() - item.rect.h / 2, 5);
-      g.position({ x: item.rect.x + item.rect.w / 2, y: item.rect.y + item.rect.h / 2 });
+      // offset=中心なので g.x()/y() は中心。rect は左上で持つ。選択全員を確定。
+      const ids = dragStart ? [...dragStart.keys()] : [item.id];
+      for (const id of ids) {
+        const ng = groups.get(id); const it = editor.panel.items.find((i) => i.id === id);
+        if (!ng || !it) continue;
+        it.rect.x = Math.round(ng.x() - it.rect.w / 2);
+        it.rect.y = Math.round(ng.y() - it.rect.h / 2);
+        ng.position({ x: it.rect.x + it.rect.w / 2, y: it.rect.y + it.rect.h / 2 });
+      }
+      dragStart = null; guideTargets = null;
+      hideGuide(guideV); hideGuide(guideH);
+      editor.bumpStructure();
       layer.batchDraw();
     });
     g.on("transformend", () => {
@@ -323,18 +403,38 @@
       const cxAbs = g.x(), cyAbs = g.y(); // offset=中心なので現在の中心座標
       item.rect.w = w;
       item.rect.h = h;
-      item.rect.x = snap(cxAbs - w / 2, 5);
-      item.rect.y = snap(cyAbs - h / 2, 5);
+      item.rect.x = Math.round(cxAbs - w / 2);
+      item.rect.y = Math.round(cyAbs - h / 2);
       item.rotation = Math.round(g.rotation());
       g.scale({ x: 1, y: 1 });
       editor.bumpStructure(); // 新サイズ・角度・フォントで作り直す
     });
   }
 
-  function attachTransformer(): void {
-    if (present || !tr) return; // 表示専用は Transformer なし
-    const g = editor.selectedId ? groups.get(editor.selectedId) : undefined;
-    tr.nodes(g ? [g] : []);
+  // 選択の見せ方：単一はTransformer（リサイズ/回転ハンドル）、複数は各オブジェクトに点線枠。
+  function refreshSelection(): void {
+    if (present || !tr) return; // 表示専用は選択表示なし
+    for (const o of outlines.values()) o.destroy();
+    outlines.clear();
+    const ids = editor.selectedIds;
+    if (ids.length <= 1) {
+      const g = ids.length === 1 ? groups.get(ids[0]) : undefined;
+      tr.nodes(g ? [g] : []);
+      return;
+    }
+    tr.nodes([]); // 複数は大枠を出さない
+    for (const id of ids) {
+      const g = groups.get(id);
+      const it = editor.panel.items.find((i) => i.id === id);
+      if (!g || !it) continue;
+      // 中心offset＋rotationでグループと一致させる（回転アイテムでも枠がズレない）
+      const o = new Konva.Rect({
+        x: g.x(), y: g.y(), offsetX: it.rect.w / 2, offsetY: it.rect.h / 2,
+        width: it.rect.w, height: it.rect.h, rotation: it.rotation,
+        stroke: "#00d2c4", strokeWidth: 1, dash: [4, 3], listening: false,
+      });
+      layer.add(o); o.moveToTop(); outlines.set(id, o);
+    }
   }
 
   function applyValues(): void {
@@ -364,7 +464,11 @@
     if (!present) {
       tr = new Konva.Transformer({ rotateEnabled: true, rotationSnaps: [0, 90, 180, 270], ignoreStroke: true });
       layer.add(tr);
-      attachTransformer();
+      // スマートアラインのガイド線（ドラッグ中のみ表示）
+      guideV = new Konva.Line({ stroke: "#ff3b6b", strokeWidth: 1, visible: false, listening: false, points: [0, 0, 0, 0] });
+      guideH = new Konva.Line({ stroke: "#ff3b6b", strokeWidth: 1, visible: false, listening: false, points: [0, 0, 0, 0] });
+      layer.add(guideV); layer.add(guideH);
+      refreshSelection();
     }
     applyValues();
     layer.draw();
@@ -377,7 +481,41 @@
     stage.scale({ x: z, y: z });
     layer = new Konva.Layer();
     stage.add(layer);
-    if (!present) stage.on("mousedown touchstart", (e) => { if (e.target === stage) editor.selectedId = null; });
+    if (!present) {
+      // 空き領域ドラッグ＝ラバーバンド選択。クリック（動かさず）＝選択解除。
+      const st = stage; // クロージャ用に非null参照を固定
+      let selRect: Konva.Rect | null = null;
+      let startPos: { x: number; y: number } | null = null;
+      const baseIds: string[] = []; // Shift追加選択の起点
+      st.on("mousedown", (e) => {
+        if (e.target !== st) return; // アイテム上は wireNode が処理
+        const p = st.getRelativePointerPosition(); if (!p) return;
+        startPos = p;
+        const shift = !!(e.evt as MouseEvent)?.shiftKey;
+        baseIds.length = 0;
+        if (shift) baseIds.push(...editor.selectedIds);
+        else editor.clearSelection();
+        selRect = new Konva.Rect({ x: p.x, y: p.y, width: 0, height: 0, fill: "rgba(0,210,196,0.12)", stroke: "#00d2c4", strokeWidth: 1 });
+        layer.add(selRect); selRect.moveToTop();
+      });
+      st.on("mousemove", () => {
+        if (!selRect || !startPos) return;
+        const p = st.getRelativePointerPosition(); if (!p) return;
+        selRect.setAttrs({ x: Math.min(startPos.x, p.x), y: Math.min(startPos.y, p.y), width: Math.abs(p.x - startPos.x), height: Math.abs(p.y - startPos.y) });
+        layer.batchDraw();
+      });
+      st.on("mouseup", () => {
+        if (!selRect || !startPos) { startPos = null; return; }
+        const box: Box = { x: selRect.x(), y: selRect.y(), w: selRect.width(), h: selRect.height() };
+        selRect.destroy(); selRect = null;
+        if (box.w > 3 || box.h > 3) {
+          const hits = editor.panel.items.filter((it) => rectsIntersect(box, it.rect)).map((it) => it.id);
+          editor.selectMany([...new Set([...baseIds, ...hits])]);
+        }
+        startPos = null;
+        layer.batchDraw();
+      });
+    }
     rebuild();
     if (present) {
       const onResize = () => { recomputeFit(); };
@@ -390,8 +528,8 @@
   // untrack で rebuild 内の values/selectedId 読み取りを依存から外す
   // （これをしないと1秒ごとの値更新で毎回フル再構築され、編集中の状態が飛ぶ）。
   $effect(() => { editor.structureVersion; if (stage) untrack(() => rebuild()); });
-  // 選択変更で Transformer を付け替え（再構築しない）
-  $effect(() => { editor.selectedId; if (stage) untrack(() => { attachTransformer(); layer.batchDraw(); }); });
+  // 選択変更で選択表示を更新（再構築しない）
+  $effect(() => { editor.selectedIds; if (stage) untrack(() => { refreshSelection(); layer.batchDraw(); }); });
   // 値更新（1秒）は動的部分だけ更新（構造・サイズは維持）
   $effect(() => { editor.values; if (stage) untrack(() => applyValues()); });
   // パネルサイズ・表示倍率（編集=editor.zoom / 表示=fitScale）の変更でステージをリサイズ＆スケール

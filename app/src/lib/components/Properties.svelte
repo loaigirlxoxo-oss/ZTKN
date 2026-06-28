@@ -62,7 +62,7 @@
 
 {#if item}
   <div class="props">
-    <div class="kind">{item.kind}</div>
+    <div class="kind">{item.kind}{#if editor.selectedIds.length > 1} ・{editor.selectedIds.length}個選択{/if}</div>
     <label>X <input type="number" bind:value={item.rect.x} oninput={changed} /></label>
     <label>Y <input type="number" bind:value={item.rect.y} oninput={changed} /></label>
     <label>W <input type="number" bind:value={item.rect.w} oninput={changed} /></label>

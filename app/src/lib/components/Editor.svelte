@@ -115,6 +115,17 @@
     </label>
     <button onclick={fitZoom}>フィット</button>
     <span class="sep">|</span>
+    <span class="align" title="整列（2つ以上選択）/ 等間隔（3つ以上）">
+      <button onclick={() => editor.align("left")} disabled={editor.selectedIds.length < 2} title="左揃え">⇤</button>
+      <button onclick={() => editor.align("centerX")} disabled={editor.selectedIds.length < 2} title="左右中央">⇔</button>
+      <button onclick={() => editor.align("right")} disabled={editor.selectedIds.length < 2} title="右揃え">⇥</button>
+      <button onclick={() => editor.align("top")} disabled={editor.selectedIds.length < 2} title="上揃え">⤒</button>
+      <button onclick={() => editor.align("centerY")} disabled={editor.selectedIds.length < 2} title="上下中央">↕</button>
+      <button onclick={() => editor.align("bottom")} disabled={editor.selectedIds.length < 2} title="下揃え">⤓</button>
+      <button onclick={() => editor.distribute("x")} disabled={editor.selectedIds.length < 3} title="横に等間隔">⋯</button>
+      <button onclick={() => editor.distribute("y")} disabled={editor.selectedIds.length < 3} title="縦に等間隔">⋮</button>
+    </span>
+    <span class="sep">|</span>
     <span class="sensor-status">🌡 {sensors.status}</span>
     <span class="msg">{msg}</span>
   </div>
@@ -138,6 +149,8 @@
   .size { color: #aaa; font-size: 12px; display: flex; align-items: center; gap: 4px; }
   .size input { width: 70px; background: #222; color: #ddd; border: 1px solid #3a3a3a; }
   .auto { color: #aaa; font-size: 12px; display: flex; align-items: center; gap: 3px; }
+  .align { display: flex; align-items: center; gap: 2px; }
+  .align button { padding: 2px 7px; font-size: 13px; line-height: 1; }
   .sensor-status { color: #8ab; font-size: 12px; }
   .msg { color: #00ffcc; font-size: 12px; }
   .editor { display: flex; align-items: stretch; flex: 1 1 auto; min-height: 0; }
