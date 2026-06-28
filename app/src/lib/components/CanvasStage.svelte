@@ -49,13 +49,19 @@
       fontFamily: item.style.fontFamily, fontSize: item.style.fontSize,
       fontStyle: item.style.fontWeight, fill: item.style.color,
     };
+    // 値が欠落(NaN)＝センサー切断時は淡色で「データなし」を示す。Labelは固定文言なので対象外。
+    const baseFill = item.style.color;
+    const MISSING = "#6b6b6b";
+    const dimmable = item.kind === "SensorText";
+    const tintFor = (val: number): string => (!dimmable || Number.isFinite(val) ? baseFill : MISSING);
+
     const parts = splitFormat(item.format ?? "%d");
     // 中央寄せ（ゲージ中心など）は数値＋単位をまとめて中央配置＝常に真ん中に揃う。
     // 単位固定の予約幅ロジックは左/右寄せ時のみ（中央寄せだと空き桁分だけ右へズレるため）。
     if (!parts || (parts.prefix === "" && parts.suffix === "") || centered) {
       const t = new Konva.Text({ ...font, text: itemDisplayText(item, v), x: 0, y, width: containerW, align: centered ? "center" : item.style.align });
       g.add(t);
-      return (val) => t.text(itemDisplayText(item, val));
+      return (val) => { t.text(itemDisplayText(item, val)); t.fill(tintFor(val)); };
     }
     const measure = (s: string) => new Konva.Text({ ...font, text: s }).width();
     const decMatch = parts.token.match(/\.(\d+)/);
@@ -68,11 +74,17 @@
     const suffixW = parts.suffix ? measure(parts.suffix) : 0;
     // ブロック全体の幅は live 値に依存しない（予約幅で固定）→ 中央寄せでも単位位置が動かない
     const blockStart = centered ? Math.max(0, (containerW - (prefixW + reserve + suffixW)) / 2) : 0;
-    if (parts.prefix) g.add(new Konva.Text({ ...font, text: parts.prefix, x: blockStart, y }));
+    const prefixNode = parts.prefix ? new Konva.Text({ ...font, text: parts.prefix, x: blockStart, y }) : null;
+    if (prefixNode) g.add(prefixNode);
     const valueNode = new Konva.Text({ ...font, text: formatValue(parts.token, v), x: blockStart + prefixW, y, width: reserve, align: "right" });
     g.add(valueNode);
-    if (parts.suffix) g.add(new Konva.Text({ ...font, text: parts.suffix, x: blockStart + prefixW + reserve, y }));
-    return (val) => valueNode.text(formatValue(parts.token, val));
+    const suffixNode = parts.suffix ? new Konva.Text({ ...font, text: parts.suffix, x: blockStart + prefixW + reserve, y }) : null;
+    if (suffixNode) g.add(suffixNode);
+    return (val) => {
+      valueNode.text(formatValue(parts.token, val));
+      const c = tintFor(val);
+      valueNode.fill(c); prefixNode?.fill(c); suffixNode?.fill(c);
+    };
   }
 
   // ローカル画像を Konva.Image として配置（未ロードなら後追いで差し込む）。

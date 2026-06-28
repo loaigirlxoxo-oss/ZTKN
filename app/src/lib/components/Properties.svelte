@@ -19,6 +19,19 @@
     return [...map.entries()];
   });
 
+  // センサー一覧の絞り込み（名前/ハード/単位/IDを部分一致）
+  let sensorQuery = $state("");
+  const filteredGroups = $derived.by(() => {
+    const q = sensorQuery.trim().toLowerCase();
+    if (!q) return grouped;
+    const out: [string, LiveSensor[]][] = [];
+    for (const [hw, arr] of grouped) {
+      const f = arr.filter((s) => `${s.name} ${hw} ${s.unit} ${s.id}`.toLowerCase().includes(q));
+      if (f.length) out.push([hw, f]);
+    }
+    return out;
+  });
+
   // プロパティ変更を Konva 再描画へ伝える（フォントは選択中アイテムのみ変更＝独立）
   function changed(): void {
     editor.bumpStructure();
@@ -112,7 +125,7 @@
         <label>第2センサー(上り)
           <select bind:value={item.sensorSrc2} onchange={changed}>
             <option value={undefined}>(なし)</option>
-            {#each grouped as [hw, arr]}
+            {#each filteredGroups as [hw, arr]}
               <optgroup label={hw}>
                 {#each arr as s}<option value={s.id}>{s.name} ({s.unit})</option>{/each}
               </optgroup>
@@ -143,10 +156,11 @@
       <label>min <input type="number" bind:value={item.range[0]} oninput={changed} /></label>
       <label>max <input type="number" bind:value={item.range[1]} oninput={changed} /></label>
     {/if}
+    <label class="sensor-search">🔍 <input type="text" placeholder="センサー検索" bind:value={sensorQuery} /></label>
     <label>センサー
       <select bind:value={item.sensorSrc} onchange={sensorChanged}>
         <option value={undefined}>(なし)</option>
-        {#each grouped as [hw, arr]}
+        {#each filteredGroups as [hw, arr]}
           <optgroup label={hw}>
             {#each arr as s}<option value={s.id}>{s.name} ({s.unit})</option>{/each}
           </optgroup>
@@ -171,6 +185,7 @@
   .muted { opacity: 0.5; }
   label { display: flex; justify-content: space-between; align-items: center; gap: 6px; font-size: 12px; }
   input, select { background: #222; color: #ddd; border: 1px solid #3a3a3a; max-width: 120px; }
+  .sensor-search input { max-width: 150px; }
   .row { display: flex; gap: 4px; margin-top: 8px; }
   .row button { flex: 1; padding: 4px; background: #2a2a2a; color: #ddd; border: 1px solid #3a3a3a; cursor: pointer; }
   .del { margin-top: 4px; padding: 4px; background: #5a2222; color: #fdd; border: 1px solid #7a3333; cursor: pointer; }
