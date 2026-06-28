@@ -233,6 +233,44 @@ fn list_fonts() -> Vec<String> {
     }
 }
 
+// タスクトレイを構築する。左クリック/「表示」でウィンドウを再表示、「終了」でプロセス終了。
+fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
+    use tauri::menu::{Menu, MenuItem};
+    use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+    use tauri::Manager;
+
+    let show = MenuItem::with_id(app, "show", "表示を開く", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", "終了", true, None::<&str>)?;
+    let menu = Menu::with_items(app, &[&show, &quit])?;
+
+    let reveal = |app: &tauri::AppHandle| {
+        if let Some(w) = app.get_webview_window("main") {
+            let _ = w.show();
+            let _ = w.unminimize();
+            let _ = w.set_focus();
+        }
+    };
+
+    TrayIconBuilder::with_id("main-tray")
+        .icon(app.default_window_icon().expect("default icon").clone())
+        .tooltip("PC Status")
+        .menu(&menu)
+        .show_menu_on_left_click(false)
+        .on_menu_event(move |app, event| match event.id.as_ref() {
+            "show" => reveal(app),
+            "quit" => app.exit(0),
+            _ => {}
+        })
+        .on_tray_icon_event(move |tray, event| {
+            // 左クリックでウィンドウを再表示
+            if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = event {
+                reveal(tray.app_handle());
+            }
+        })
+        .build(app)?;
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -240,7 +278,15 @@ pub fn run() {
         .setup(|app| {
             let _ = std::fs::create_dir_all(assets_dir()); // 起動時にAssetsを必ず用意
             start_sensor_sidecar(app.handle().clone());
+            setup_tray(app.handle())?; // タスクトレイ常駐
             Ok(())
+        })
+        // 閉じる(×)では終了せずトレイへ格納＝常駐。終了はトレイメニューから。
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                api.prevent_close();
+                let _ = window.hide();
+            }
         })
         .invoke_handler(tauri::generate_handler![
             greet, save_panel, load_panel, read_text_file, list_dir_images,
