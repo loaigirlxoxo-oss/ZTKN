@@ -5,10 +5,13 @@
   const kinds: { kind: ItemKind; label: string }[] = [
     { kind: "Label", label: "▢ ラベル" },
     { kind: "SensorText", label: "# センサー値" },
+    { kind: "DateTime", label: "🕒 日時" },
     { kind: "Gauge", label: "◔ ゲージ" },
     { kind: "GraphLine", label: "∿ グラフ" },
     { kind: "BarH", label: "▭ 横バー" },
     { kind: "BarV", label: "▯ 縦バー" },
+    { kind: "Box", label: "⬛ ボックス" },
+    { kind: "Line", label: "— 線" },
   ];
 </script>
 

@@ -203,18 +203,106 @@ fn list_asset_sets() -> Result<Vec<AssetSet>, String> {
     Ok(sets)
 }
 
+// Windows にインストール済みのフォントファミリ名を全列挙する。
+// GDI+ の InstalledFontCollection を PowerShell 経由で読む（依存クレート追加なし）。
+// 日本語フォント名が化けないよう出力エンコーディングを UTF-8 に固定する。
+#[tauri::command]
+fn list_fonts() -> Vec<String> {
+    let script = "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; \
+        Add-Type -AssemblyName System.Drawing; \
+        (New-Object System.Drawing.Text.InstalledFontCollection).Families | ForEach-Object { $_.Name }";
+    let mut cmd = Command::new("powershell");
+    cmd.args(["-NoProfile", "-NonInteractive", "-Command", script]);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW: コンソールの一瞬の表示を抑止
+    }
+    match cmd.output() {
+        Ok(o) => {
+            let mut v: Vec<String> = String::from_utf8_lossy(&o.stdout)
+                .lines()
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect();
+            v.sort();
+            v.dedup();
+            v
+        }
+        Err(_) => vec![],
+    }
+}
+
+// タスクトレイを構築する。左クリック/「表示」でウィンドウを再表示、「終了」でプロセス終了。
+fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
+    use tauri::menu::{Menu, MenuItem};
+    use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+    use tauri::Manager;
+
+    let show = MenuItem::with_id(app, "show", "表示を開く", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", "終了", true, None::<&str>)?;
+    let menu = Menu::with_items(app, &[&show, &quit])?;
+
+    let reveal = |app: &tauri::AppHandle| {
+        if let Some(w) = app.get_webview_window("main") {
+            let _ = w.show();
+            let _ = w.unminimize();
+            let _ = w.set_focus();
+        }
+    };
+
+    TrayIconBuilder::with_id("main-tray")
+        .icon(app.default_window_icon().expect("default icon").clone())
+        .tooltip("PC Status")
+        .menu(&menu)
+        .show_menu_on_left_click(false)
+        .on_menu_event(move |app, event| match event.id.as_ref() {
+            "show" => reveal(app),
+            "quit" => app.exit(0),
+            _ => {}
+        })
+        .on_tray_icon_event(move |tray, event| {
+            // 左クリックでウィンドウを再表示
+            if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = event {
+                reveal(tray.app_handle());
+            }
+        })
+        .build(app)?;
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        // OSログイン時の自動起動（Windowsはレジストリ Run キー）。--minimized 付きで起動。
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            Some(vec!["--minimized"]),
+        ))
         .setup(|app| {
             let _ = std::fs::create_dir_all(assets_dir()); // 起動時にAssetsを必ず用意
             start_sensor_sidecar(app.handle().clone());
+            setup_tray(app.handle())?; // タスクトレイ常駐
+            // 自動起動(--minimized)時はウィンドウを出さずトレイ常駐で開始
+            if std::env::args().any(|a| a == "--minimized") {
+                use tauri::Manager;
+                if let Some(w) = app.get_webview_window("main") {
+                    let _ = w.hide();
+                }
+            }
             Ok(())
+        })
+        // 閉じる(×)では終了せずトレイへ格納＝常駐。終了はトレイメニューから。
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                api.prevent_close();
+                let _ = window.hide();
+            }
         })
         .invoke_handler(tauri::generate_handler![
             greet, save_panel, load_panel, read_text_file, list_dir_images,
-            assets_root, open_assets_dir, list_asset_sets
+            assets_root, open_assets_dir, list_asset_sets, list_fonts
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

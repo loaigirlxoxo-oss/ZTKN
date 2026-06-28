@@ -1,6 +1,14 @@
 // 対応トークン: %d, %.<n>f, %f。1トークンのみ置換する素朴実装。
 const TOKEN = /%(?:\.(\d+))?([df])/;
 
+// センサーの単位から表示フォーマットを決める（℃/%/W等を手で書かなくて済む）。
+export function formatForUnit(unit: string | undefined): string {
+  if (!unit) return "%d";
+  if (unit === "%") return "%d%";
+  if (unit === "V") return "%.2f V"; // 電圧は小数
+  return `%d ${unit}`;
+}
+
 // フォーマットを「接頭辞 / 数値トークン / 単位(接尾辞)」に分割する。
 // 単位を固定位置で描くために使う（トークンが無ければ null）。
 export function splitFormat(format: string): { prefix: string; token: string; suffix: string } | null {

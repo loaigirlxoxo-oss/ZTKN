@@ -1,6 +1,8 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import Editor from "$lib/components/Editor.svelte";
+  import Present from "$lib/components/Present.svelte";
+  import { view } from "$lib/editor/view.svelte";
   import { editor } from "$lib/editor/editorState.svelte";
   import { sensors } from "$lib/sensors/live.svelte";
   import { pickSensor } from "$lib/sensors/match";
@@ -35,7 +37,11 @@
   });
 </script>
 
-<Editor />
+{#if view.present}
+  <Present />
+{:else}
+  <Editor />
+{/if}
 
 <style>
   :global(body) { margin: 0; background: #0a0a0a; font-family: sans-serif; }

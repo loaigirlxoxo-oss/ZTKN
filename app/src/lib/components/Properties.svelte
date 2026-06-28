@@ -1,6 +1,10 @@
 <script lang="ts">
   import { editor } from "$lib/editor/editorState.svelte";
   import { sensors, type LiveSensor } from "$lib/sensors/live.svelte";
+  import { formatForUnit } from "$lib/render/format";
+  import { fontStore, ensureFonts } from "$lib/fonts/installed.svelte";
+
+  ensureFonts(); // インストール済みフォントを取得（多重防止済み）
 
   const item = $derived(editor.selected);
 
@@ -15,9 +19,31 @@
     return [...map.entries()];
   });
 
+  // センサー一覧の絞り込み（名前/ハード/単位/IDを部分一致）
+  let sensorQuery = $state("");
+  const filteredGroups = $derived.by(() => {
+    const q = sensorQuery.trim().toLowerCase();
+    if (!q) return grouped;
+    const out: [string, LiveSensor[]][] = [];
+    for (const [hw, arr] of grouped) {
+      const f = arr.filter((s) => `${s.name} ${hw} ${s.unit} ${s.id}`.toLowerCase().includes(q));
+      if (f.length) out.push([hw, f]);
+    }
+    return out;
+  });
+
   // プロパティ変更を Konva 再描画へ伝える（フォントは選択中アイテムのみ変更＝独立）
   function changed(): void {
     editor.bumpStructure();
+  }
+
+  // センサーを選んだら、その単位から format を自動設定（SensorTextのみ）
+  function sensorChanged(): void {
+    if (item && item.kind === "SensorText") {
+      const s = sensors.list.find((x) => x.id === item.sensorSrc);
+      item.format = formatForUnit(s?.unit);
+    }
+    changed();
   }
 
   function toggleBold(e: Event): void {
@@ -36,7 +62,7 @@
 
 {#if item}
   <div class="props">
-    <div class="kind">{item.kind}</div>
+    <div class="kind">{item.kind}{#if editor.selectedIds.length > 1} ・{editor.selectedIds.length}個選択{/if}</div>
     <label>X <input type="number" bind:value={item.rect.x} oninput={changed} /></label>
     <label>Y <input type="number" bind:value={item.rect.y} oninput={changed} /></label>
     <label>W <input type="number" bind:value={item.rect.w} oninput={changed} /></label>
@@ -45,15 +71,8 @@
     <label>不透明度 <input type="range" min="0" max="1" step="0.05" bind:value={item.opacity} oninput={changed} /></label>
     <label>フォント
       <select bind:value={item.style.fontFamily} onchange={changed}>
-        <!-- Windows 標準同梱で視認差が大きいものに限定（未インストールだとフォールバックで差が出ない） -->
-        <option>Segoe UI</option>
-        <option>Arial</option>
-        <option>Consolas</option>
-        <option>Times New Roman</option>
-        <option>Comic Sans MS</option>
-        <option>Impact</option>
-        <option>Meiryo</option>
-        <option>MS Gothic</option>
+        <!-- Windows にインストール済みの全フォント（Rust の list_fonts 経由）。未取得時は FALLBACK -->
+        {#each fontStore.list as f}<option value={f}>{f}</option>{/each}
       </select>
     </label>
     <label>サイズ <input type="number" bind:value={item.style.fontSize} oninput={changed} /></label>
@@ -80,6 +99,7 @@
         </select>
       </label>
       <label>単位を自動換算 <input type="checkbox" bind:checked={item.autoUnit} onchange={changed} /></label>
+      <label>値倍率 <input type="number" step="0.1" bind:value={item.valueScale} oninput={changed} placeholder="1" /></label>
       <label>自動スケール <input type="checkbox" checked={!item.range} onchange={toggleAuto} /></label>
       <label>スケール表示 <input type="checkbox" bind:checked={item.showScale} onchange={changed} /></label>
       <label>スタイル
@@ -105,7 +125,7 @@
         <label>第2センサー(上り)
           <select bind:value={item.sensorSrc2} onchange={changed}>
             <option value={undefined}>(なし)</option>
-            {#each grouped as [hw, arr]}
+            {#each filteredGroups as [hw, arr]}
               <optgroup label={hw}>
                 {#each arr as s}<option value={s.id}>{s.name} ({s.unit})</option>{/each}
               </optgroup>
@@ -115,11 +135,18 @@
         <label>色2 <input type="color" bind:value={item.color2} oninput={changed} /></label>
       {/if}
     {/if}
-    {#if item.kind === "Gauge" || item.kind === "BarH" || item.kind === "BarV" || item.kind === "GraphLine"}
-      <label>背景色 <input type="color" bind:value={item.bgColor} oninput={changed} /></label>
-      <label>背景透過度 <input type="range" min="0" max="1" step="0.05" bind:value={item.bgOpacity} oninput={changed} /></label>
+    {#if item.kind === "Gauge" || item.kind === "BarH" || item.kind === "BarV" || item.kind === "GraphLine" || item.kind === "Box"}
+      <label>{item.kind === "Box" ? "塗り色" : "背景色"} <input type="color" bind:value={item.bgColor} oninput={changed} /></label>
+      <label>{item.kind === "Box" ? "塗り透過度" : "背景透過度"} <input type="range" min="0" max="1" step="0.05" bind:value={item.bgOpacity} oninput={changed} /></label>
       <label>枠色 <input type="color" bind:value={item.frameColor} oninput={changed} /></label>
       <label>枠透過度 <input type="range" min="0" max="1" step="0.05" bind:value={item.frameOpacity} oninput={changed} /></label>
+    {/if}
+    {#if item.kind === "Box"}
+      <label>枠太さ <input type="number" min="0" bind:value={item.borderWidth} oninput={changed} /></label>
+      <label>角丸 <input type="number" min="0" bind:value={item.cornerRadius} oninput={changed} /></label>
+    {/if}
+    {#if item.kind === "Line"}
+      <label>太さ <input type="number" min="1" bind:value={item.lineWidth} oninput={changed} /></label>
     {/if}
     {#if item.kind === "BarH" || item.kind === "BarV"}
       <label>2色グラデ <input type="checkbox" bind:checked={item.useGradient} onchange={changed} /></label>
@@ -129,17 +156,23 @@
       <label>min <input type="number" bind:value={item.range[0]} oninput={changed} /></label>
       <label>max <input type="number" bind:value={item.range[1]} oninput={changed} /></label>
     {/if}
+    <label class="sensor-search">🔍 <input type="text" placeholder="センサー検索" bind:value={sensorQuery} /></label>
     <label>センサー
-      <select bind:value={item.sensorSrc} onchange={changed}>
+      <select bind:value={item.sensorSrc} onchange={sensorChanged}>
         <option value={undefined}>(なし)</option>
-        {#each grouped as [hw, arr]}
+        {#each filteredGroups as [hw, arr]}
           <optgroup label={hw}>
             {#each arr as s}<option value={s.id}>{s.name} ({s.unit})</option>{/each}
           </optgroup>
         {/each}
       </select>
     </label>
-    <button class="del" onclick={() => editor.deleteSelected()}>削除</button>
+    <div class="row">
+      <button onclick={() => editor.duplicateSelected()} title="複製 (Ctrl+D)">複製</button>
+      <button onclick={() => editor.bringToFront()} title="最前面へ">前面</button>
+      <button onclick={() => editor.sendToBack()} title="最背面へ">背面</button>
+    </div>
+    <button class="del" onclick={() => editor.deleteSelected()}>削除 (Del)</button>
   </div>
 {:else}
   <div class="props muted">アイテムを選択</div>
@@ -152,5 +185,8 @@
   .muted { opacity: 0.5; }
   label { display: flex; justify-content: space-between; align-items: center; gap: 6px; font-size: 12px; }
   input, select { background: #222; color: #ddd; border: 1px solid #3a3a3a; max-width: 120px; }
-  .del { margin-top: 8px; padding: 4px; background: #5a2222; color: #fdd; border: 1px solid #7a3333; cursor: pointer; }
+  .sensor-search input { max-width: 150px; }
+  .row { display: flex; gap: 4px; margin-top: 8px; }
+  .row button { flex: 1; padding: 4px; background: #2a2a2a; color: #ddd; border: 1px solid #3a3a3a; cursor: pointer; }
+  .del { margin-top: 4px; padding: 4px; background: #5a2222; color: #fdd; border: 1px solid #7a3333; cursor: pointer; }
 </style>
