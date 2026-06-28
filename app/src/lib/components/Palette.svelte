@@ -10,6 +10,8 @@
     { kind: "GraphLine", label: "∿ グラフ" },
     { kind: "BarH", label: "▭ 横バー" },
     { kind: "BarV", label: "▯ 縦バー" },
+    { kind: "Box", label: "⬛ ボックス" },
+    { kind: "Line", label: "— 線" },
   ];
 </script>
 

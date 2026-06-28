@@ -125,11 +125,18 @@
         <label>色2 <input type="color" bind:value={item.color2} oninput={changed} /></label>
       {/if}
     {/if}
-    {#if item.kind === "Gauge" || item.kind === "BarH" || item.kind === "BarV" || item.kind === "GraphLine"}
-      <label>背景色 <input type="color" bind:value={item.bgColor} oninput={changed} /></label>
-      <label>背景透過度 <input type="range" min="0" max="1" step="0.05" bind:value={item.bgOpacity} oninput={changed} /></label>
+    {#if item.kind === "Gauge" || item.kind === "BarH" || item.kind === "BarV" || item.kind === "GraphLine" || item.kind === "Box"}
+      <label>{item.kind === "Box" ? "塗り色" : "背景色"} <input type="color" bind:value={item.bgColor} oninput={changed} /></label>
+      <label>{item.kind === "Box" ? "塗り透過度" : "背景透過度"} <input type="range" min="0" max="1" step="0.05" bind:value={item.bgOpacity} oninput={changed} /></label>
       <label>枠色 <input type="color" bind:value={item.frameColor} oninput={changed} /></label>
       <label>枠透過度 <input type="range" min="0" max="1" step="0.05" bind:value={item.frameOpacity} oninput={changed} /></label>
+    {/if}
+    {#if item.kind === "Box"}
+      <label>枠太さ <input type="number" min="0" bind:value={item.borderWidth} oninput={changed} /></label>
+      <label>角丸 <input type="number" min="0" bind:value={item.cornerRadius} oninput={changed} /></label>
+    {/if}
+    {#if item.kind === "Line"}
+      <label>太さ <input type="number" min="1" bind:value={item.lineWidth} oninput={changed} /></label>
     {/if}
     {#if item.kind === "BarH" || item.kind === "BarV"}
       <label>2色グラデ <input type="checkbox" bind:checked={item.useGradient} onchange={changed} /></label>

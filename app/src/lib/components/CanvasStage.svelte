@@ -103,7 +103,14 @@
     g.add(new Konva.Rect({ width: item.rect.w, height: item.rect.h, fill: "rgba(0,0,0,0)" }));
     const v = valueFor(item);
 
-    if (item.kind === "DateTime") {
+    if (item.kind === "Box") {
+      const cr = item.cornerRadius ?? 0;
+      // 塗りと枠を別ノードにして色・透過を部品ごとに調整可能
+      g.add(new Konva.Rect({ width: item.rect.w, height: item.rect.h, cornerRadius: cr, fill: item.bgColor ?? "#222222", opacity: item.bgOpacity ?? 1 }));
+      g.add(new Konva.Rect({ width: item.rect.w, height: item.rect.h, cornerRadius: cr, stroke: item.frameColor ?? "#888888", strokeWidth: item.borderWidth ?? 1, opacity: item.frameOpacity ?? 1 }));
+    } else if (item.kind === "Line") {
+      g.add(new Konva.Line({ points: [0, item.rect.h / 2, item.rect.w, item.rect.h / 2], stroke: item.style.color, strokeWidth: item.lineWidth ?? 2, lineCap: "round" }));
+    } else if (item.kind === "DateTime") {
       const t = new Konva.Text({
         text: "", x: 0, y: 0, width: item.rect.w, align: item.style.align,
         fontFamily: item.style.fontFamily, fontSize: item.style.fontSize,

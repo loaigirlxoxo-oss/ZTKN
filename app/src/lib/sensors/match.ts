@@ -1,5 +1,19 @@
 import type { LiveSensor } from "./live.svelte";
 
+// ネットワーク速度センサーを、ハードウェア(アダプタ)優先で選ぶ。
+// 例: pickNetwork(list, ["download","ダウンロード","受信"], ["イーサネット","ethernet"])
+export function pickNetwork(list: LiveSensor[], nameKw: string[], hwKw: string[]): LiveSensor | undefined {
+  const rateLike = list.filter(
+    (s) => s.type === "Throughput" || /\/s|bps/i.test(s.unit) || /rate|速度|ダウン|アップ|download|upload|受信|送信/i.test(s.name),
+  );
+  const nameHit = (s: LiveSensor) => nameKw.some((n) => s.name.toLowerCase().includes(n.toLowerCase()));
+  for (const hk of hwKw) {
+    const hit = rateLike.find((s) => s.hw.toLowerCase().includes(hk.toLowerCase()) && nameHit(s));
+    if (hit) return hit;
+  }
+  return rateLike.find(nameHit);
+}
+
 // 実センサー一覧からベストマッチを1つ選ぶ（サンプル自動割当用）。
 // type="" のときは種別を問わず名前キーワードのみで探す（HWiNFO/LHM の命名差を吸収）。
 export function pickSensor(list: LiveSensor[], type: string, nameIncludes: string[] = []): LiveSensor | undefined {

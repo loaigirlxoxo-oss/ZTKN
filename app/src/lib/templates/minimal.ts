@@ -1,6 +1,6 @@
 import { createPanel, createItem, type Panel, type PanelItem } from "$lib/model/panel";
 import { sensors } from "$lib/sensors/live.svelte";
-import { pickSensor } from "$lib/sensors/match";
+import { pickSensor, pickNetwork } from "$lib/sensors/match";
 import { formatForUnit } from "$lib/render/format";
 
 // 数値中心のシンプルなテンプレ。大きな読み取り値を並べ、下に細い1本グラフ。
@@ -27,7 +27,7 @@ export function buildMinimalTemplate(): Panel {
   const vram = bind("Load", ["GPU メモリ", "VRAM", "GPU Memory", "Memory Used"]);
   const cpuPower = bind("Power", ["CPU パッケージ", "CPU Package Power", "CPU"]);
   const gpuPower = bind("Power", ["GPU Power", "GPU 電力", "GPU"]);
-  const netDown = pickSensor(sensors.list, "", ["ダウンロード", "Download", "受信", "DL"])?.id;
+  const netDown = pickNetwork(sensors.list, ["download", "ダウンロード", "受信", "dl"], ["イーサネット", "ethernet"])?.id;
 
   const xs = [80, 560, 1040, 1520];
   cell(xs[0], 60, "CPU TEMP", cpuTemp);
@@ -43,7 +43,7 @@ export function buildMinimalTemplate(): Panel {
   const clab = createItem("Label", { x: xs[3], y: 200 }); clab.format = "CLOCK"; clab.style.fontSize = 16; clab.style.color = "#8aa"; clab.rect.w = 360; add(clab);
 
   const graph = createItem("GraphLine", { x: 80, y: 350 });
-  graph.rect.w = 1760; graph.rect.h = 100; graph.unit = "B/s"; graph.autoUnit = true; graph.bgOpacity = 0.2;
+  graph.rect.w = 1760; graph.rect.h = 100; graph.unit = "Kbps"; graph.autoUnit = true; graph.bgOpacity = 0.2;
   graph.graphStyle = "filled"; graph.style.color = "#00d2c4"; graph.sensorSrc = netDown;
   add(graph);
 

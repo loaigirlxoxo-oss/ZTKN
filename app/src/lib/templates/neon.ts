@@ -1,6 +1,6 @@
 import { createPanel, createItem, type Panel, type PanelItem } from "$lib/model/panel";
 import { sensors } from "$lib/sensors/live.svelte";
-import { pickSensor } from "$lib/sensors/match";
+import { pickSensor, pickNetwork } from "$lib/sensors/match";
 import { formatForUnit } from "$lib/render/format";
 
 // 素材を使わず、うちのベクター描画＋実センサーで組む 1920x480 テンプレ「Neon」。
@@ -45,8 +45,9 @@ export function buildNeonTemplate(): Panel {
   const dram = bind("Load", ["仮想メモリ", "物理メモリ", "メモリ使用", "メモリ", "Memory", "RAM"]);
   const cpuPower = bind("Power", ["CPU パッケージ", "CPU Package Power", "CPU PPT", "CPU"]);
   const gpuPower = bind("Power", ["GPU Power", "GPU 電力", "GPU"]);
-  const netDown = pickSensor(sensors.list, "", ["ダウンロード", "Download", "受信", "DL"])?.id;
-  const netUp = pickSensor(sensors.list, "", ["アップロード", "Upload", "送信", "UL", "上り"])?.id;
+  // ネットはイーサネット優先
+  const netDown = pickNetwork(sensors.list, ["download", "ダウンロード", "受信", "dl"], ["イーサネット", "ethernet"])?.id;
+  const netUp = pickNetwork(sensors.list, ["upload", "アップロード", "送信", "ul", "上り"], ["イーサネット", "ethernet"])?.id;
 
   const WARM = "#ffb14e", COOL = "#00d2c4", GREEN = "#6af62a", PINK = "#ff3484";
 
@@ -64,7 +65,7 @@ export function buildNeonTemplate(): Panel {
   // --- 中央：ネットワーク / 電力 / 時計 ---
   label("NETWORK  ↓ / ↑", 660, 56, 14, COOL);
   const graph = createItem("GraphLine", { x: 660, y: 84 });
-  graph.rect.w = 600; graph.rect.h = 150; graph.unit = "B/s"; graph.autoUnit = true; graph.bgOpacity = 0.25;
+  graph.rect.w = 600; graph.rect.h = 150; graph.unit = "Kbps"; graph.autoUnit = true; graph.bgOpacity = 0.25;
   graph.graphStyle = "dual-mirrored"; graph.style.color = COOL; graph.color2 = PINK;
   graph.sensorSrc = netDown; graph.sensorSrc2 = netUp;
   add(graph);
