@@ -7,10 +7,17 @@
   import { editor } from "$lib/editor/editorState.svelte";
   import { sensors } from "$lib/sensors/live.svelte";
   import { savePanel, loadPanel } from "$lib/editor/persist";
+  import { buildNeonTemplate } from "$lib/templates/neon";
 
   let msg = $state("");
   let showAssets = $state(true);
   let wrapEl: HTMLDivElement | undefined = $state();
+
+  function loadTemplate(): void {
+    editor.replacePanel(buildNeonTemplate());
+    fitZoom();
+    msg = "テンプレ(Neon)を読み込みました";
+  }
 
   // 表示倍率をビューポートに合わせる
   function fitZoom(): void {
@@ -70,6 +77,7 @@
     <button onclick={() => editor.undo()} disabled={!editor.canUndo} title="元に戻す (Ctrl+Z)">↶</button>
     <button onclick={() => editor.redo()} disabled={!editor.canRedo} title="やり直し (Ctrl+Y)">↷</button>
     <button onclick={() => (showAssets = !showAssets)}>アセット{showAssets ? "▼" : "▲"}</button>
+    <button onclick={loadTemplate} title="サンプルテンプレを読み込む">テンプレ</button>
     <span class="sep">|</span>
     <label class="size">レイアウト幅 <input type="number" min="100" bind:value={editor.panel.size.w} /></label>
     <label class="size">高さ <input type="number" min="100" bind:value={editor.panel.size.h} /></label>

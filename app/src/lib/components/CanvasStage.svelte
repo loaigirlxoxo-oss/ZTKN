@@ -5,6 +5,7 @@
   import type { PanelItem } from "$lib/model/panel";
   import { itemDisplayText } from "$lib/render/draw";
   import { formatValue, splitFormat } from "$lib/render/format";
+  import { formatDate } from "$lib/render/datetime";
   import { valueToFraction } from "$lib/render/gauge";
   import { historyToPoints, graphScale, autoRateUnit } from "$lib/render/graph";
   import { getImage, loadImage } from "$lib/render/images";
@@ -18,6 +19,14 @@
   const updaters = new Map<string, (v: number) => void>(); // 値だけ更新する関数
 
   function valueFor(item: PanelItem): number {
+    if (item.sensorSum && item.sensorSum.length) {
+      let sum = 0, any = false;
+      for (const id of item.sensorSum) {
+        const v = editor.values.get(id);
+        if (v !== undefined && Number.isFinite(v)) { sum += v; any = true; }
+      }
+      return any ? sum : NaN;
+    }
     return item.sensorSrc ? (editor.values.get(item.sensorSrc) ?? NaN) : NaN;
   }
 
@@ -94,7 +103,18 @@
     g.add(new Konva.Rect({ width: item.rect.w, height: item.rect.h, fill: "rgba(0,0,0,0)" }));
     const v = valueFor(item);
 
-    if (item.kind === "Label" || item.kind === "SensorText") {
+    if (item.kind === "DateTime") {
+      const t = new Konva.Text({
+        text: "", x: 0, y: 0, width: item.rect.w, align: item.style.align,
+        fontFamily: item.style.fontFamily, fontSize: item.style.fontSize,
+        fontStyle: item.style.fontWeight, fill: item.style.color,
+      });
+      g.add(t);
+      const fmt = item.format ?? "HH:mm:ss";
+      const upd = () => t.text(formatDate(fmt, new Date()));
+      upd();
+      updaters.set(item.id, upd); // 1秒ごとの値tickで更新
+    } else if (item.kind === "Label" || item.kind === "SensorText") {
       updaters.set(item.id, addValueUnit(g, item, v, item.rect.w, false, 0));
     } else if (item.kind === "BarH" || item.kind === "BarV") {
       const [min, max] = item.range ?? [0, 100];
@@ -261,7 +281,7 @@
       const w = Math.max(8, Math.round(g.width() * sx));
       const h = Math.max(8, Math.round(g.height() * sy));
       // テキスト系は縦方向の拡縮にフォントサイズを追従させる（箱だけ伸びて文字が戻る問題の解消）
-      if (item.kind === "Label" || item.kind === "SensorText") {
+      if (item.kind === "Label" || item.kind === "SensorText" || item.kind === "DateTime") {
         item.style.fontSize = Math.max(6, Math.round(item.style.fontSize * sy));
       }
       const cxAbs = g.x(), cyAbs = g.y(); // offset=中心なので現在の中心座標
