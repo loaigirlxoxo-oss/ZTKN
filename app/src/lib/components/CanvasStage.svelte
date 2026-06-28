@@ -207,14 +207,16 @@
             for (let i = 0; i < p.length; i += 2) { c.moveTo(p[i], h); c.lineTo(p[i], p[i + 1]); }
             c.strokeStyle = col; c.lineWidth = 1; c.stroke();
           };
-          const drawFill = (p?: number[], col = gcolor, a = 0.25) => {
+          const drawFill = (p?: number[], col = gcolor, a = 0.25, baseY = h) => {
             if (!p || p.length < 4) return;
             c.beginPath(); c.moveTo(p[0], p[1]);
             for (let i = 2; i < p.length; i += 2) c.lineTo(p[i], p[i + 1]);
-            c.lineTo(p[p.length - 2], h); c.lineTo(p[0], h); c.closePath();
+            c.lineTo(p[p.length - 2], baseY); c.lineTo(p[0], baseY); c.closePath();
             c.globalAlpha = a; c.fillStyle = col; c.fill(); c.globalAlpha = 1;
           };
-          const flip = (p?: number[]) => p?.map((v, i) => (i % 2 === 1 ? h - v : v));
+          // 中心線(h/2)基準で上半分=下り／下半分=上りに圧縮（本来の上下対称グラフ）
+          const halfTop = (p?: number[]) => p?.map((v, i) => (i % 2 === 1 ? v / 2 : v));
+          const halfBot = (p?: number[]) => p?.map((v, i) => (i % 2 === 1 ? h - v / 2 : v));
 
           if (!isDual) {
             if (gstyle === "dots") { drawDots(pts); return; }
@@ -225,8 +227,8 @@
           }
           // 2本系（下り=pts/gcolor、上り=up/gcolor2）
           switch (gstyle) {
-            case "dual-mirrored": drawLine(pts); drawLine(flip(up), gcolor2); break;
-            case "dual-filled-split": { const fu = flip(up); drawFill(pts); drawFill(fu, gcolor2); drawLine(pts); drawLine(fu, gcolor2); break; }
+            case "dual-mirrored": { const dt = halfTop(pts), ub = halfBot(up); drawLine(dt); drawLine(ub, gcolor2); break; }
+            case "dual-filled-split": { const dt = halfTop(pts), ub = halfBot(up); drawFill(dt, gcolor, 0.25, h / 2); drawFill(ub, gcolor2, 0.25, h / 2); drawLine(dt); drawLine(ub, gcolor2); break; }
             case "dual-bars": drawSpike(pts); drawLine(up, gcolor2); break;
             case "dual-dotted": drawDots(pts); drawDots(up, gcolor2); break;
             case "dual-scanband":
