@@ -4,7 +4,6 @@ import { pickSensor, pickNetwork } from "$lib/sensors/match";
 import { formatForUnit } from "$lib/render/format";
 
 // 素材を使わず、うちのベクター描画＋実センサーで組む 1920x480 テンプレ「Neon」。
-// センサーは実行時にライブ一覧へキーワードでベストバインド（決め打ちパスなし）。
 export function buildNeonTemplate(): Panel {
   const panel = createPanel(1920, 480);
   const items: PanelItem[] = [];
@@ -17,16 +16,11 @@ export function buildNeonTemplate(): Panel {
     it.format = txt; it.style.fontSize = size; it.style.color = color; it.rect.w = 220;
     return add(it);
   };
-  // 数値表示。format はセンサーの単位から自動（℃/%/W等を手書きしない）
-  const text = (x: number, y: number, sensor: string | undefined, size: number, color: string, w = 180) => {
+  const text = (x: number, y: number, sensor: string | undefined, size: number, color: string, w = 180, align: "left" | "center" = "left") => {
     const it = createItem("SensorText", { x, y });
-    it.format = formatForUnit(unitOf(sensor)); it.sensorSrc = sensor; it.style.fontSize = size; it.style.color = color;
+    it.format = formatForUnit(unitOf(sensor)); it.sensorSrc = sensor;
+    it.style.fontSize = size; it.style.color = color; it.style.align = align;
     it.rect.w = w; it.rect.h = size + 8;
-    return add(it);
-  };
-  const gauge = (x: number, y: number, sensor: string | undefined, range: [number, number], color: string) => {
-    const it = createItem("Gauge", { x, y });
-    it.rect.w = 130; it.rect.h = 130; it.sensorSrc = sensor; it.range = range; it.style.color = color; it.format = "%d";
     return add(it);
   };
   const bar = (x: number, y: number, sensor: string | undefined, color: string, grad: string, w = 280) => {
@@ -35,32 +29,37 @@ export function buildNeonTemplate(): Panel {
     it.style.color = color; it.useGradient = true; it.gradColor = grad;
     return add(it);
   };
+  // 丸ゲージ＝負荷、中央に負荷%／仕切り線／温度
+  const gaugeModule = (x: number, y: number, size: number, loadSensor: string | undefined, tempSensor: string | undefined, color: string) => {
+    const g = createItem("Gauge", { x, y });
+    g.rect.w = size; g.rect.h = size; g.sensorSrc = loadSensor; g.range = [0, 100]; g.style.color = color; g.format = "%d";
+    add(g);
+    text(x, y + size * 0.27, loadSensor, size * 0.23, "#eee8d6", size, "center");
+    const ln = createItem("Line", { x: x + size * 0.30, y: y + size * 0.50 });
+    ln.rect.w = size * 0.40; ln.rect.h = 4; ln.style.color = "#cccccc"; ln.lineWidth = 1; add(ln);
+    text(x, y + size * 0.55, tempSensor, size * 0.18, "#eee8d6", size, "center");
+  };
 
   // --- センサーを実機にバインド ---
-  const cpuTemp = bind("Temperature", ["CPU パッケージ", "CPU Package", "パッケージ", "CPU"]);
-  const cpuLoad = bind("Load", ["Total CPU", "合計 CPU", "CPU Total", "CPU 使用", "Total"]);
-  const gpuTemp = bind("Temperature", ["GPU 温度", "GPU Temperature", "GPU Hot", "GPU"]);
-  const gpuLoad = bind("Load", ["GPU Core", "GPU 使用", "GPU Utilization", "GPU"]);
-  const vram = bind("Load", ["GPU メモリ", "VRAM", "GPU Memory", "Memory Used"]);
-  const dram = bind("Load", ["仮想メモリ", "物理メモリ", "メモリ使用", "メモリ", "Memory", "RAM"]);
-  const cpuPower = bind("Power", ["CPU パッケージ", "CPU Package Power", "CPU PPT", "CPU"]);
-  const gpuPower = bind("Power", ["GPU Power", "GPU 電力", "GPU"]);
-  // ネットはイーサネット優先
+  const cpuTemp = bind("Temperature", ["CPU パッケージ", "CPU Package", "パッケージ"]);
+  const cpuLoad = bind("", ["総 CPU 使用率", "Total CPU Usage", "合計 CPU", "CPU 使用率"]);
+  const gpuTemp = bind("Temperature", ["GPU 温度", "GPU Temperature"]);
+  const gpuLoad = bind("", ["GPU コア使用率", "GPU Core Load", "GPU コア", "GPU Utilization"]);
+  const vram = bind("", ["GPU メモリ使用", "GPU Memory Usage", "VRAM"]);
+  const dram = bind("", ["物理メモリ使用率", "Physical Memory Load", "物理メモリ"]);
+  const cpuPower = bind("Power", ["CPU パッケージ", "CPU Package Power", "CPU PPT"]);
+  const gpuPower = bind("Power", ["GPU 電力", "GPU Power"]);
   const netDown = pickNetwork(sensors.list, ["download", "ダウンロード", "受信", "dl"], ["イーサネット", "ethernet"])?.id;
   const netUp = pickNetwork(sensors.list, ["upload", "アップロード", "送信", "ul", "上り"], ["イーサネット", "ethernet"])?.id;
 
   const WARM = "#ffb14e", COOL = "#00d2c4", GREEN = "#6af62a", PINK = "#ff3484";
 
   // --- CPU（左） ---
-  label("CPU", 60, 56, 20, WARM);
-  gauge(96, 100, cpuTemp, [20, 95], WARM);
-  text(250, 116, cpuTemp, 54, "#eee8d6", 200);
-  label("LOAD", 60, 300, 14);
-  bar(60, 320, cpuLoad, GREEN, "#ff5a3c");
-  text(352, 318, cpuLoad, 22, "#ccc", 90);
-  label("DRAM", 60, 360, 14);
-  bar(60, 380, dram, "#ffd23f", "#ff5a3c");
-  text(352, 378, dram, 22, "#ccc", 90);
+  label("CPU", 70, 50, 20, WARM);
+  gaugeModule(80, 90, 190, cpuLoad, cpuTemp, WARM);
+  label("DRAM", 70, 320, 14);
+  bar(70, 342, dram, "#ffd23f", "#ff5a3c", 300);
+  text(382, 340, dram, 22, "#ccc", 90);
 
   // --- 中央：ネットワーク / 電力 / 時計 ---
   label("NETWORK  ↓ / ↑", 660, 56, 14, COOL);
@@ -82,15 +81,11 @@ export function buildNeonTemplate(): Panel {
   add(date);
 
   // --- GPU（右） ---
-  label("GPU", 1700, 56, 20, COOL);
-  gauge(1700, 100, gpuTemp, [20, 90], COOL);
-  text(1470, 116, gpuTemp, 54, "#eee8d6", 200);
-  label("LOAD", 1540, 300, 14);
-  bar(1540, 320, gpuLoad, COOL, "#8652ff");
-  text(1832, 318, gpuLoad, 22, "#ccc", 80);
-  label("VRAM", 1540, 360, 14);
-  bar(1540, 380, vram, "#8652ff", "#ff3484");
-  text(1832, 378, vram, 22, "#ccc", 80);
+  label("GPU", 1640, 50, 20, COOL);
+  gaugeModule(1650, 90, 190, gpuLoad, gpuTemp, COOL);
+  label("VRAM", 1540, 320, 14);
+  bar(1540, 342, vram, "#8652ff", "#ff3484", 300);
+  text(1852, 340, vram, 22, "#ccc", 60);
 
   panel.items = items;
   return panel;

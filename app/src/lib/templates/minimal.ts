@@ -19,14 +19,14 @@ export function buildMinimalTemplate(): Panel {
     val.style.fontSize = 60; val.style.color = "#eee8d6"; val.rect.w = 360; val.rect.h = 70; add(val);
   };
 
-  const cpuTemp = bind("Temperature", ["CPU パッケージ", "CPU Package", "パッケージ", "CPU"]);
-  const cpuLoad = bind("Load", ["Total CPU", "合計 CPU", "CPU Total", "CPU 使用", "Total"]);
-  const gpuTemp = bind("Temperature", ["GPU 温度", "GPU Temperature", "GPU"]);
-  const gpuLoad = bind("Load", ["GPU Core", "GPU 使用", "GPU Utilization", "GPU"]);
-  const dram = bind("Load", ["仮想メモリ", "物理メモリ", "メモリ使用", "メモリ", "Memory", "RAM"]);
-  const vram = bind("Load", ["GPU メモリ", "VRAM", "GPU Memory", "Memory Used"]);
-  const cpuPower = bind("Power", ["CPU パッケージ", "CPU Package Power", "CPU"]);
-  const gpuPower = bind("Power", ["GPU Power", "GPU 電力", "GPU"]);
+  const cpuTemp = bind("Temperature", ["CPU パッケージ", "CPU Package", "パッケージ"]);
+  const cpuLoad = bind("", ["総 CPU 使用率", "Total CPU Usage", "合計 CPU", "CPU 使用率"]);
+  const gpuTemp = bind("Temperature", ["GPU 温度", "GPU Temperature"]);
+  const gpuLoad = bind("", ["GPU コア使用率", "GPU Core Load", "GPU コア", "GPU Utilization"]);
+  const dram = bind("", ["物理メモリ使用率", "Physical Memory Load", "物理メモリ"]);
+  const vram = bind("", ["GPU メモリ使用", "GPU Memory Usage", "VRAM"]);
+  const cpuPower = bind("Power", ["CPU パッケージ", "CPU Package Power", "CPU PPT"]);
+  const gpuPower = bind("Power", ["GPU 電力", "GPU Power"]);
   const netDown = pickNetwork(sensors.list, ["download", "ダウンロード", "受信", "dl"], ["イーサネット", "ethernet"])?.id;
 
   const xs = [80, 560, 1040, 1520];

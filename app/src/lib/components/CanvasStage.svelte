@@ -123,7 +123,7 @@
       upd();
       updaters.set(item.id, upd); // 1秒ごとの値tickで更新
     } else if (item.kind === "Label" || item.kind === "SensorText") {
-      updaters.set(item.id, addValueUnit(g, item, v, item.rect.w, false, 0));
+      updaters.set(item.id, addValueUnit(g, item, v, item.rect.w, item.style.align === "center", 0));
     } else if (item.kind === "BarH" || item.kind === "BarV") {
       const [min, max] = item.range ?? [0, 100];
       const w = item.rect.w, h = item.rect.h;
