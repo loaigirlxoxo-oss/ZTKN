@@ -90,6 +90,8 @@
       width: item.rect.w, height: item.rect.h,
       rotation: item.rotation, opacity: item.opacity, id: item.id, draggable: true,
     });
+    // 透明なヒット領域：枠内どこでもクリックで選択できる（中空ゲージ/余白/小さい表示でも当たる）
+    g.add(new Konva.Rect({ width: item.rect.w, height: item.rect.h, fill: "rgba(0,0,0,0)" }));
     const v = valueFor(item);
 
     if (item.kind === "Label" || item.kind === "SensorText") {
