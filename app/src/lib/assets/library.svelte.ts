@@ -12,6 +12,14 @@ class AssetLibrary {
     this.sets = await invoke<AssetSet[]>("list_asset_sets");
   }
 
+  async openFolder(): Promise<void> {
+    try {
+      await invoke("open_assets_dir");
+    } catch (e) {
+      this.msg = "フォルダを開けません: " + e;
+    }
+  }
+
   async importAida64(root: string): Promise<void> {
     this.loading = true;
     this.msg = "取込中…";

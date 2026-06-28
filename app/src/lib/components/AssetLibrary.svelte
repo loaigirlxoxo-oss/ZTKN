@@ -55,6 +55,7 @@
     <strong>アセット</strong>
     <button onclick={() => library.importAida64(AIDA64_ASSETS)} disabled={library.loading}>AIDA64パック取込</button>
     <button onclick={() => library.refresh()}>更新</button>
+    <button onclick={() => library.openFolder()}>Assetsを開く</button>
     <span class="msg">{library.msg}</span>
     {#if editor.selected?.kind === "Gauge"}<span class="hint">→ 選択中ゲージに割当</span>{/if}
   </div>

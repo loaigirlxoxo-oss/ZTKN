@@ -153,6 +153,18 @@ fn assets_root() -> String {
     assets_dir().to_string_lossy().to_string()
 }
 
+// エクスプローラで Assets フォルダを開く（無ければ作ってから）。
+#[tauri::command]
+fn open_assets_dir() -> Result<(), String> {
+    let dir = assets_dir();
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    std::process::Command::new("explorer")
+        .arg(&dir)
+        .spawn()
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 // フォルダ src_dir 内の画像を Assets/<set_name>/ にコピーし、コピー後の画像パス一覧を返す。
 #[tauri::command]
 fn import_asset_folder(src_dir: String, set_name: String) -> Result<Vec<String>, String> {
@@ -264,12 +276,13 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
+            let _ = std::fs::create_dir_all(assets_dir()); // 起動時にAssetsを必ず用意
             start_sensor_sidecar(app.handle().clone());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             greet, save_panel, load_panel, read_text_file, list_dir_images,
-            assets_root, import_asset_folder, import_asset_file, list_asset_sets, import_aida64_pack
+            assets_root, open_assets_dir, import_asset_folder, import_asset_file, list_asset_sets, import_aida64_pack
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
