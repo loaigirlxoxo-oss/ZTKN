@@ -139,7 +139,12 @@
         {/each}
       </select>
     </label>
-    <button class="del" onclick={() => editor.deleteSelected()}>削除</button>
+    <div class="row">
+      <button onclick={() => editor.duplicateSelected()} title="複製 (Ctrl+D)">複製</button>
+      <button onclick={() => editor.bringToFront()} title="最前面へ">前面</button>
+      <button onclick={() => editor.sendToBack()} title="最背面へ">背面</button>
+    </div>
+    <button class="del" onclick={() => editor.deleteSelected()}>削除 (Del)</button>
   </div>
 {:else}
   <div class="props muted">アイテムを選択</div>
@@ -152,5 +157,7 @@
   .muted { opacity: 0.5; }
   label { display: flex; justify-content: space-between; align-items: center; gap: 6px; font-size: 12px; }
   input, select { background: #222; color: #ddd; border: 1px solid #3a3a3a; max-width: 120px; }
-  .del { margin-top: 8px; padding: 4px; background: #5a2222; color: #fdd; border: 1px solid #7a3333; cursor: pointer; }
+  .row { display: flex; gap: 4px; margin-top: 8px; }
+  .row button { flex: 1; padding: 4px; background: #2a2a2a; color: #ddd; border: 1px solid #3a3a3a; cursor: pointer; }
+  .del { margin-top: 4px; padding: 4px; background: #5a2222; color: #fdd; border: 1px solid #7a3333; cursor: pointer; }
 </style>

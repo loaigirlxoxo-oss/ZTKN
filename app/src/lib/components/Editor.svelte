@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import Palette from "./Palette.svelte";
   import CanvasStage from "./CanvasStage.svelte";
   import Properties from "./Properties.svelte";
@@ -9,6 +10,29 @@
 
   let msg = $state("");
   let showAssets = $state(true);
+
+  // キーボードショートカット（フォーム入力中はネイティブに任せる）
+  onMount(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === "INPUT" || t.tagName === "SELECT" || t.tagName === "TEXTAREA")) return;
+      const ctrl = e.ctrlKey || e.metaKey;
+      const k = e.key.toLowerCase();
+      if (ctrl && k === "z") { e.preventDefault(); if (e.shiftKey) editor.redo(); else editor.undo(); return; }
+      if (ctrl && k === "y") { e.preventDefault(); editor.redo(); return; }
+      if (ctrl && k === "d") { e.preventDefault(); editor.duplicateSelected(); return; }
+      if (ctrl && k === "c") { editor.copySelected(); return; }
+      if (ctrl && k === "v") { editor.paste(); return; }
+      if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); editor.deleteSelected(); return; }
+      const step = e.shiftKey ? 10 : 1;
+      if (e.key === "ArrowLeft") { e.preventDefault(); editor.nudge(-step, 0); }
+      else if (e.key === "ArrowRight") { e.preventDefault(); editor.nudge(step, 0); }
+      else if (e.key === "ArrowUp") { e.preventDefault(); editor.nudge(0, -step); }
+      else if (e.key === "ArrowDown") { e.preventDefault(); editor.nudge(0, step); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
 
   async function doSave(): Promise<void> {
     try {
@@ -34,6 +58,8 @@
   <div class="toolbar">
     <button onclick={doSave}>保存</button>
     <button onclick={doLoad}>読込</button>
+    <button onclick={() => editor.undo()} disabled={!editor.canUndo} title="元に戻す (Ctrl+Z)">↶</button>
+    <button onclick={() => editor.redo()} disabled={!editor.canRedo} title="やり直し (Ctrl+Y)">↷</button>
     <button onclick={() => (showAssets = !showAssets)}>アセット{showAssets ? "▼" : "▲"}</button>
     <span class="sep">|</span>
     <label class="size">レイアウト幅 <input type="number" min="100" bind:value={editor.panel.size.w} /></label>
