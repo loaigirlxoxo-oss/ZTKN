@@ -84,12 +84,36 @@
       <label>スケール表示 <input type="checkbox" bind:checked={item.showScale} onchange={changed} /></label>
       <label>スタイル
         <select bind:value={item.graphStyle} onchange={changed}>
-          <option value="line">線(clean-wave)</option>
-          <option value="filled">塗り(filled-scan)</option>
-          <option value="dots">点(dot-matrix)</option>
-          <option value="spike">スパイク(spike-trace)</option>
+          <optgroup label="単一線">
+            <option value="line">線(clean-wave)</option>
+            <option value="filled">塗り(filled-scan)</option>
+            <option value="dots">点(dot-matrix)</option>
+            <option value="spike">スパイク(spike-trace)</option>
+          </optgroup>
+          <optgroup label="2本(下り+上り)">
+            <option value="dual-basic">basic(2本線)</option>
+            <option value="dual-crossing">crossing(交差)</option>
+            <option value="dual-mirrored">mirrored(上下対称)</option>
+            <option value="dual-filled-split">filled-split(塗り分け)</option>
+            <option value="dual-bars">bars-trace(棒+線)</option>
+            <option value="dual-dotted">dotted(点線)</option>
+            <option value="dual-scanband">scanband(帯)</option>
+          </optgroup>
         </select>
       </label>
+      {#if item.graphStyle?.startsWith("dual")}
+        <label>第2センサー(上り)
+          <select bind:value={item.sensorSrc2} onchange={changed}>
+            <option value={undefined}>(なし)</option>
+            {#each grouped as [hw, arr]}
+              <optgroup label={hw}>
+                {#each arr as s}<option value={s.id}>{s.name} ({s.unit})</option>{/each}
+              </optgroup>
+            {/each}
+          </select>
+        </label>
+        <label>色2 <input type="color" bind:value={item.color2} oninput={changed} /></label>
+      {/if}
     {/if}
     {#if item.kind === "Gauge" || item.kind === "BarH" || item.kind === "BarV" || item.kind === "GraphLine"}
       <label>背景色 <input type="color" bind:value={item.bgColor} oninput={changed} /></label>

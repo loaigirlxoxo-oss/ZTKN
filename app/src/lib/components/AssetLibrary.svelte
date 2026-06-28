@@ -4,6 +4,13 @@
   import { library, type AssetSet } from "$lib/assets/library.svelte";
   import { editor } from "$lib/editor/editorState.svelte";
   import { createItem } from "$lib/model/panel";
+  import { sensors } from "$lib/sensors/live.svelte";
+  import { pickSensor } from "$lib/sensors/match";
+
+  type GraphStyle =
+    | "line" | "filled" | "dots" | "spike"
+    | "dual-basic" | "dual-crossing" | "dual-mirrored" | "dual-filled-split"
+    | "dual-bars" | "dual-dotted" | "dual-scanband";
 
   onMount(() => { library.refresh(); });
 
@@ -11,8 +18,8 @@
   type Cat = "bg" | "round" | "bar" | "graph" | "other";
   function cat(name: string): Cat {
     const n = name.toLowerCase();
-    // 単一線グラフ（network/line-graph-assets/Single/...）。dualは Phase B でその他扱い
-    if (n.includes("line-graph") && n.includes("single")) return "graph";
+    // 線グラフ（network/line-graph-assets/... 単一・2本とも）
+    if (n.includes("line-graph")) return "graph";
     if (n.includes("background") || n.includes("backdrop") || /(^|\/)bg(\/|$)/.test(n)) return "bg";
     if (n.includes("round") || n.includes("circle") || n.includes("dial")) return "round";
     if (n.includes("horizontal") || n.includes("bar")) return "bar";
@@ -28,8 +35,17 @@
   const GRAPH_COLORS: Record<string, string> = {
     cream: "#eee8d6", cyan: "#00d2c4", lime: "#6af62a", pink: "#ff3484", purple: "#8652ff", yellow: "#f4d35e",
   };
-  function styleFromName(name: string): "line" | "filled" | "dots" | "spike" {
+  function styleFromName(name: string): GraphStyle {
     const n = name.toLowerCase();
+    if (n.includes("dual")) {
+      if (n.includes("crossing")) return "dual-crossing";
+      if (n.includes("mirrored")) return "dual-mirrored";
+      if (n.includes("filled-split")) return "dual-filled-split";
+      if (n.includes("bars")) return "dual-bars";
+      if (n.includes("dotted")) return "dual-dotted";
+      if (n.includes("scanband")) return "dual-scanband";
+      return "dual-basic";
+    }
     if (n.includes("dot-matrix")) return "dots";
     if (n.includes("filled-scan")) return "filled";
     if (n.includes("spike-trace")) return "spike";
@@ -39,6 +55,18 @@
     const f = path.toLowerCase();
     for (const [name, hex] of Object.entries(GRAPH_COLORS)) if (f.includes(name)) return hex;
     return "#00d2c4";
+  }
+  // dualファイル名の2色（出現順）。例 "01-basic-cyan-pink.png" → [cyan,pink]
+  function colorsFromFile(path: string): [string, string] {
+    const f = path.toLowerCase().replace(/\.[^.]+$/, "");
+    const hits = Object.keys(GRAPH_COLORS)
+      .map((n) => ({ n, idx: f.indexOf(n) }))
+      .filter((x) => x.idx >= 0)
+      .sort((a, b) => a.idx - b.idx);
+    return [hits[0] ? GRAPH_COLORS[hits[0].n] : "#00d2c4", hits[1] ? GRAPH_COLORS[hits[1].n] : "#ff3484"];
+  }
+  function findUpload(): string | undefined {
+    return pickSensor(sensors.list, "", ["上り", "アップロード", "送信", "Upload", "UL"])?.id;
   }
 
   // 線グラフのスタイル＋色を選択中GraphLineへ適用（未選択なら新規）
@@ -50,8 +78,15 @@
       editor.panel.items.push(item);
       editor.selectedId = item.id;
     }
-    item.graphStyle = styleFromName(setName);
-    item.style.color = colorFromFile(file);
+    const style = styleFromName(setName);
+    item.graphStyle = style;
+    if (style.startsWith("dual")) {
+      const [c1, c2] = colorsFromFile(file);
+      item.style.color = c1; item.color2 = c2;
+      if (!item.sensorSrc2) item.sensorSrc2 = findUpload();
+    } else {
+      item.style.color = colorFromFile(file);
+    }
     editor.bumpStructure();
   }
 

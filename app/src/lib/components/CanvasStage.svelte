@@ -154,38 +154,61 @@
       }
       const gstyle = item.graphStyle ?? "line";
       const gcolor = item.style.color;
+      const gcolor2 = item.color2 ?? "#ff3484";
+      const isDual = gstyle.startsWith("dual");
       const graph = new Konva.Shape({
         sceneFunc: (ctx, shp) => {
           const c = (ctx as unknown as { _context: CanvasRenderingContext2D })._context;
           const pts = shp.getAttr("pts") as number[] | undefined;
-          if (!pts || pts.length < 4) return;
-          if (gstyle === "dots") {
-            c.beginPath();
-            for (let i = 0; i < pts.length; i += 2) { c.moveTo(pts[i] + 1.6, pts[i + 1]); c.arc(pts[i], pts[i + 1], 1.6, 0, Math.PI * 2); }
-            c.fillStyle = gcolor; c.fill();
+          const up = shp.getAttr("pts2") as number[] | undefined;
+          const drawLine = (p?: number[], col = gcolor, wd = 1.5) => {
+            if (!p || p.length < 4) return;
+            c.beginPath(); c.moveTo(p[0], p[1]);
+            for (let i = 2; i < p.length; i += 2) c.lineTo(p[i], p[i + 1]);
+            c.lineJoin = "round"; c.lineCap = "round"; c.strokeStyle = col; c.lineWidth = wd; c.stroke();
+          };
+          const drawDots = (p?: number[], col = gcolor) => {
+            if (!p) return; c.beginPath();
+            for (let i = 0; i < p.length; i += 2) { c.moveTo(p[i] + 1.4, p[i + 1]); c.arc(p[i], p[i + 1], 1.4, 0, Math.PI * 2); }
+            c.fillStyle = col; c.fill();
+          };
+          const drawSpike = (p?: number[], col = gcolor) => {
+            if (!p) return; c.beginPath();
+            for (let i = 0; i < p.length; i += 2) { c.moveTo(p[i], h); c.lineTo(p[i], p[i + 1]); }
+            c.strokeStyle = col; c.lineWidth = 1; c.stroke();
+          };
+          const drawFill = (p?: number[], col = gcolor, a = 0.25) => {
+            if (!p || p.length < 4) return;
+            c.beginPath(); c.moveTo(p[0], p[1]);
+            for (let i = 2; i < p.length; i += 2) c.lineTo(p[i], p[i + 1]);
+            c.lineTo(p[p.length - 2], h); c.lineTo(p[0], h); c.closePath();
+            c.globalAlpha = a; c.fillStyle = col; c.fill(); c.globalAlpha = 1;
+          };
+          const flip = (p?: number[]) => p?.map((v, i) => (i % 2 === 1 ? h - v : v));
+
+          if (!isDual) {
+            if (gstyle === "dots") { drawDots(pts); return; }
+            if (gstyle === "spike") { drawSpike(pts); return; }
+            if (gstyle === "filled") drawFill(pts);
+            drawLine(pts);
             return;
           }
-          if (gstyle === "spike") {
-            c.beginPath();
-            for (let i = 0; i < pts.length; i += 2) { c.moveTo(pts[i], h); c.lineTo(pts[i], pts[i + 1]); }
-            c.strokeStyle = gcolor; c.lineWidth = 1; c.stroke();
-            return;
+          // 2本系（下り=pts/gcolor、上り=up/gcolor2）
+          switch (gstyle) {
+            case "dual-mirrored": drawLine(pts); drawLine(flip(up), gcolor2); break;
+            case "dual-filled-split": { const fu = flip(up); drawFill(pts); drawFill(fu, gcolor2); drawLine(pts); drawLine(fu, gcolor2); break; }
+            case "dual-bars": drawSpike(pts); drawLine(up, gcolor2); break;
+            case "dual-dotted": drawDots(pts); drawDots(up, gcolor2); break;
+            case "dual-scanband":
+              if (pts && up && pts.length >= 4 && up.length >= 4) {
+                c.beginPath(); c.moveTo(pts[0], pts[1]);
+                for (let i = 2; i < pts.length; i += 2) c.lineTo(pts[i], pts[i + 1]);
+                for (let i = up.length - 2; i >= 0; i -= 2) c.lineTo(up[i], up[i + 1]);
+                c.closePath(); c.globalAlpha = 0.22; c.fillStyle = gcolor; c.fill(); c.globalAlpha = 1;
+              }
+              drawLine(pts); drawLine(up, gcolor2); break;
+            default: drawLine(pts); drawLine(up, gcolor2); break; // basic / crossing
           }
-          // line（clean-wave）/ filled（filled-scan）
-          if (gstyle === "filled") {
-            c.beginPath();
-            c.moveTo(pts[0], pts[1]);
-            for (let i = 2; i < pts.length; i += 2) c.lineTo(pts[i], pts[i + 1]);
-            c.lineTo(pts[pts.length - 2], h);
-            c.lineTo(pts[0], h);
-            c.closePath();
-            c.globalAlpha = 0.25; c.fillStyle = gcolor; c.fill(); c.globalAlpha = 1;
-          }
-          c.beginPath();
-          c.moveTo(pts[0], pts[1]);
-          for (let i = 2; i < pts.length; i += 2) c.lineTo(pts[i], pts[i + 1]);
-          c.lineJoin = "round"; c.lineCap = "round";
-          c.strokeStyle = gcolor; c.lineWidth = 1.5; c.stroke();
         },
       });
       g.add(graph);
@@ -199,9 +222,12 @@
       const fmt = (n: number) => (Math.abs(n) >= 100 ? String(Math.round(n)) : n.toFixed(1));
       const apply = () => {
         const hist = item.sensorSrc ? (editor.history.get(item.sensorSrc) ?? []) : [];
-        graph.setAttr("pts", historyToPoints(hist, w, h, item.range));
+        const hist2 = isDual && item.sensorSrc2 ? (editor.history.get(item.sensorSrc2) ?? []) : [];
+        // 2本系は両方を同じスケールで（比較できるように）
+        const [mn, mx] = graphScale([...hist, ...hist2], item.range);
+        graph.setAttr("pts", historyToPoints(hist, w, h, [mn, mx]));
+        if (isDual) graph.setAttr("pts2", historyToPoints(hist2, w, h, [mn, mx]));
         if (!showScale) return;
-        const [mn, mx] = graphScale(hist, item.range);
         // 表示単位：自動ON ならスケール上限に追従(Kbps↔Mbps↔Gbps)、OFF なら入力単位を固定
         const { unit, factor } = item.autoUnit === false
           ? { unit: item.unit ?? "", factor: 1 }
