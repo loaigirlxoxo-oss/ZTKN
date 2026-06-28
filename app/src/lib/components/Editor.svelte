@@ -79,7 +79,7 @@
   .size input { width: 70px; background: #222; color: #ddd; border: 1px solid #3a3a3a; }
   .sensor-status { color: #8ab; font-size: 12px; }
   .msg { color: #00ffcc; font-size: 12px; }
-  .editor { display: flex; align-items: flex-start; flex: 1 1 auto; min-height: 0; }
+  .editor { display: flex; align-items: stretch; flex: 1 1 auto; min-height: 0; }
   .canvas-wrap { flex: 1; padding: 16px; overflow: auto; height: 100%; }
   .drawer { flex: 0 0 38vh; min-height: 0; }
 </style>

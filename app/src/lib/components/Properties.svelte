@@ -114,7 +114,8 @@
 {/if}
 
 <style>
-  .props { display: flex; flex-direction: column; gap: 4px; padding: 8px; background: #161616; color: #ccc; width: 210px; }
+  /* エディタ行の高さ内で独立スクロール（ドロワーに押されて隠れないように） */
+  .props { display: flex; flex-direction: column; gap: 4px; padding: 8px; background: #161616; color: #ccc; width: 210px; height: 100%; overflow-y: auto; box-sizing: border-box; flex: 0 0 auto; }
   .kind { color: #00ffcc; font-size: 13px; margin-bottom: 4px; }
   .muted { opacity: 0.5; }
   label { display: flex; justify-content: space-between; align-items: center; gap: 6px; font-size: 12px; }
