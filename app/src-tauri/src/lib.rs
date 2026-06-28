@@ -77,6 +77,32 @@ fn load_panel(name: String) -> Result<String, String> {
     std::fs::read_to_string(&path).map_err(|e| e.to_string())
 }
 
+// 任意のテキストファイルを読む（AIDA64 の layout.json 取り込み等）。
+#[tauri::command]
+fn read_text_file(path: String) -> Result<String, String> {
+    std::fs::read_to_string(&path).map_err(|e| e.to_string())
+}
+
+// フォルダ内の画像ファイル（png/jpg/jpeg/webp）をファイル名順で絶対パス一覧にする。
+// 状態フレームゲージ（state-01..state-16）の取り込みに使う。
+#[tauri::command]
+fn list_dir_images(dir: String) -> Result<Vec<String>, String> {
+    let mut files: Vec<String> = std::fs::read_dir(&dir)
+        .map_err(|e| e.to_string())?
+        .filter_map(|e| e.ok())
+        .map(|e| e.path())
+        .filter(|p| {
+            p.extension()
+                .and_then(|x| x.to_str())
+                .map(|x| matches!(x.to_ascii_lowercase().as_str(), "png" | "jpg" | "jpeg" | "webp"))
+                .unwrap_or(false)
+        })
+        .map(|p| p.to_string_lossy().to_string())
+        .collect();
+    files.sort();
+    Ok(files)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -85,7 +111,7 @@ pub fn run() {
             start_sensor_sidecar(app.handle().clone());
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![greet, save_panel, load_panel])
+        .invoke_handler(tauri::generate_handler![greet, save_panel, load_panel, read_text_file, list_dir_images])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

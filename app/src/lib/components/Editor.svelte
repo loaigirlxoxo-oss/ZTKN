@@ -5,8 +5,22 @@
   import { editor } from "$lib/editor/editorState.svelte";
   import { sensors } from "$lib/sensors/live.svelte";
   import { savePanel, loadPanel } from "$lib/editor/persist";
+  import { importAida64Layout } from "$lib/aida64/import";
 
   let msg = $state("");
+
+  // 当面は素材フォルダの絶対パス固定（後でフォルダ選択ダイアログに）
+  const AIDA64_ASSETS = "D:/VSCode/PC Status/aida64-skin-final-assets-v3";
+
+  async function doImportAida64(): Promise<void> {
+    try {
+      const panel = await importAida64Layout(AIDA64_ASSETS);
+      editor.replacePanel(panel);
+      msg = "AIDA64レイアウトを取り込みました";
+    } catch (e) {
+      msg = "取込失敗: " + e;
+    }
+  }
 
   async function doSave(): Promise<void> {
     try {
@@ -31,6 +45,7 @@
 <div class="toolbar">
   <button onclick={doSave}>保存</button>
   <button onclick={doLoad}>読込</button>
+  <button onclick={doImportAida64}>AIDA64取込</button>
   <span class="sep">|</span>
   <label class="size">レイアウト幅 <input type="number" min="100" bind:value={editor.panel.size.w} /></label>
   <label class="size">高さ <input type="number" min="100" bind:value={editor.panel.size.h} /></label>

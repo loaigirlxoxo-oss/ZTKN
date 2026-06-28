@@ -7,6 +7,7 @@
   import { formatValue, splitFormat } from "$lib/render/format";
   import { valueToFraction } from "$lib/render/gauge";
   import { historyToPoints, graphScale, autoRateUnit } from "$lib/render/graph";
+  import { getImage, loadImage } from "$lib/render/images";
   import { snap } from "$lib/editor/snap";
 
   let container: HTMLDivElement;
@@ -52,6 +53,34 @@
     return (val) => valueNode.text(formatValue(parts.token, val));
   }
 
+  // ローカル画像を Konva.Image として配置（未ロードなら後追いで差し込む）。
+  function addImageNode(g: Konva.Group, path: string, w: number, h: number): Konva.Image {
+    const node = new Konva.Image({ width: w, height: h, image: getImage(path) });
+    g.add(node);
+    if (!getImage(path)) {
+      loadImage(path).then((img) => { node.image(img); node.getLayer()?.batchDraw(); }).catch(() => {});
+    }
+    return node;
+  }
+
+  // 連番画像ゲージ（AIDA64 state-01..NN）。値で表示フレームを切り替える。
+  function addStateFrames(g: Konva.Group, frames: string[], w: number, h: number, min: number, max: number, v: number): (val: number) => void {
+    const node = new Konva.Image({ width: w, height: h, image: undefined });
+    g.add(node);
+    for (const f of frames) {
+      if (!getImage(f)) loadImage(f).then(() => node.getLayer()?.batchDraw()).catch(() => {});
+    }
+    const apply = (val: number) => {
+      if (frames.length === 0) return;
+      const fr = valueToFraction(val, min, max);
+      const idx = Math.min(frames.length - 1, Math.max(0, Math.round(fr * (frames.length - 1))));
+      const img = getImage(frames[idx]);
+      if (img) node.image(img);
+    };
+    apply(v);
+    return apply;
+  }
+
   function buildNode(item: PanelItem): Konva.Group {
     // offset を中心に置くことで、回転（ハンドル・数値とも）がオブジェクト中心を軸になる。
     // 子は従来どおり 0..w,0..h に描き、offset が左上を rect.x/y に合わせる。
@@ -94,6 +123,11 @@
         }
       };
       apply(v); updaters.set(item.id, apply);
+    } else if (item.kind === "Image") {
+      if (item.asset) addImageNode(g, item.asset, item.rect.w, item.rect.h);
+    } else if (item.kind === "Gauge" && item.gauge?.mode === "StateFrames") {
+      const [min, max] = item.range ?? [0, 100];
+      updaters.set(item.id, addStateFrames(g, item.gauge.frames, item.rect.w, item.rect.h, min, max, v));
     } else if (item.kind === "Gauge") {
       const [min, max] = item.range ?? [0, 100];
       const r = Math.min(item.rect.w, item.rect.h) / 2;
@@ -194,13 +228,21 @@
   function rebuild(): void {
     groups.clear(); updaters.clear();
     layer.destroyChildren();
-    tr = new Konva.Transformer({ rotateEnabled: true, rotationSnaps: [0, 90, 180, 270], ignoreStroke: true });
-    layer.add(tr);
+    // 背景画像（最下層・選択対象外）
+    const bgPath = editor.panel.background;
+    if (bgPath) {
+      const bg = new Konva.Image({ x: 0, y: 0, width: editor.panel.size.w, height: editor.panel.size.h, image: getImage(bgPath), listening: false });
+      layer.add(bg);
+      if (!getImage(bgPath)) loadImage(bgPath).then((img) => { bg.image(img); layer.batchDraw(); }).catch(() => {});
+    }
     for (const item of [...editor.panel.items].sort((a, b) => a.z - b.z)) {
       const g = buildNode(item);
       groups.set(item.id, g);
       layer.add(g);
     }
+    // Transformer は最前面（ハンドルがアイテムに隠れないように）
+    tr = new Konva.Transformer({ rotateEnabled: true, rotationSnaps: [0, 90, 180, 270], ignoreStroke: true });
+    layer.add(tr);
     attachTransformer();
     applyValues();
     layer.draw();

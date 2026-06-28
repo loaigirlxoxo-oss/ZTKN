@@ -13,7 +13,9 @@ export interface Style {
 export type GaugeRender =
   | { mode: "VectorArc" }
   | { mode: "NeedleRotate"; dialAsset?: string; needleAsset: string; pivot: [number, number]; angleStart: number; angleEnd: number; }
-  | { mode: "SpriteStrip"; spriteAsset: string; frameCount: number; orientation: "horizontal" | "vertical"; };
+  | { mode: "SpriteStrip"; spriteAsset: string; frameCount: number; orientation: "horizontal" | "vertical"; }
+  // 値で切り替える連番画像（AIDA64 Custom Gauge の state-01..state-NN）。frames は絶対パスの配列。
+  | { mode: "StateFrames"; frames: string[] };
 
 export interface PanelItem {
   id: string;
