@@ -11,14 +11,14 @@
   onMount(() => { library.refresh(); });
 
   const backgrounds = $derived(library.sets.find((s) => s.name === "backgrounds"));
-  const rounds = $derived(library.sets.filter((s) => s.name.startsWith("round--")));
+  const rounds = $derived(library.sets.filter((s) => s.name.startsWith("round/")));
 
   // 横バーは スタイル(barcode/scanline/...) ごとにまとめ、中に色を並べる
   const barGroups = $derived.by(() => {
     const byStyle = new Map<string, { set: AssetSet; color: string }[]>();
     for (const s of library.sets) {
-      if (!s.name.startsWith("bar--")) continue;
-      const rest = s.name.slice("bar--".length); // 例 "barcode-cream"
+      if (!s.name.startsWith("bar/")) continue;
+      const rest = s.name.slice("bar/".length); // 例 "barcode-cream"
       const dash = rest.lastIndexOf("-");
       const style = dash >= 0 ? rest.slice(0, dash) : rest;
       const color = dash >= 0 ? rest.slice(dash + 1) : "";
@@ -37,7 +37,7 @@
     let item = editor.selected;
     if (!item || item.kind !== "Gauge") {
       item = createItem("Gauge", { x: 80, y: 80 });
-      if (set.name.startsWith("bar--")) { item.rect.w = 320; item.rect.h = 48; }
+      if (set.name.startsWith("bar/")) { item.rect.w = 320; item.rect.h = 48; }
       else { item.rect.w = 118; item.rect.h = 118; }
       editor.panel.items.push(item);
       editor.selectedId = item.id;
@@ -47,7 +47,7 @@
   }
 
   const thumb = (s: AssetSet) => s.files[Math.floor(s.files.length / 2)] ?? s.files[0];
-  const roundLabel = (s: AssetSet) => s.name.replace("round--", "").replace(/gradient-/, "");
+  const roundLabel = (s: AssetSet) => s.name.replace("round/", "").replace(/gradient-/, "");
 </script>
 
 <div class="lib">

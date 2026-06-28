@@ -194,21 +194,38 @@ fn import_asset_file(src_file: String, set_name: String) -> Result<String, Strin
     Ok(dp.to_string_lossy().to_string())
 }
 
-// Assets/ 配下のセット一覧（フォルダ名→画像一覧）。
+// Assets/ 以下を再帰的にたどり、画像を直接含むフォルダ＝1セットとして集める。
+// セット名は Assets からの相対パス（例 "backgrounds", "round/gradient-heat", "bar/barcode-cream"）。
+fn collect_sets(base: &std::path::Path, dir: &std::path::Path, out: &mut Vec<AssetSet>) {
+    let imgs = images_in(dir);
+    if !imgs.is_empty() {
+        let name = dir
+            .strip_prefix(base)
+            .unwrap_or(dir)
+            .to_string_lossy()
+            .replace('\\', "/");
+        out.push(AssetSet { name, files: imgs });
+    }
+    if let Ok(rd) = std::fs::read_dir(dir) {
+        for e in rd.flatten() {
+            let p = e.path();
+            if p.is_dir() {
+                collect_sets(base, &p, out);
+            }
+        }
+    }
+}
+
 #[tauri::command]
 fn list_asset_sets() -> Result<Vec<AssetSet>, String> {
     let root = assets_dir();
-    if !root.exists() {
-        return Ok(vec![]);
-    }
     let mut sets: Vec<AssetSet> = vec![];
-    for entry in std::fs::read_dir(&root).map_err(|e| e.to_string())? {
-        let p = entry.map_err(|e| e.to_string())?.path();
-        if p.is_dir() {
-            sets.push(AssetSet {
-                name: p.file_name().unwrap().to_string_lossy().to_string(),
-                files: images_in(&p),
-            });
+    if root.exists() {
+        for entry in std::fs::read_dir(&root).map_err(|e| e.to_string())? {
+            let p = entry.map_err(|e| e.to_string())?.path();
+            if p.is_dir() {
+                collect_sets(&root, &p, &mut sets);
+            }
         }
     }
     sets.sort_by(|a, b| a.name.cmp(&b.name));
@@ -238,7 +255,7 @@ fn import_aida64_pack(src_root: String) -> Result<Vec<String>, String> {
         for e in std::fs::read_dir(&round).map_err(|x| x.to_string())? {
             let p = e.map_err(|x| x.to_string())?.path();
             if p.is_dir() {
-                let set = format!("round--{}", p.file_name().unwrap().to_string_lossy());
+                let set = format!("round/{}", p.file_name().unwrap().to_string_lossy());
                 import_asset_folder(p.to_string_lossy().to_string(), set.clone())?;
                 created.push(set);
             }
@@ -255,7 +272,7 @@ fn import_aida64_pack(src_root: String) -> Result<Vec<String>, String> {
                     let color = color_e.map_err(|x| x.to_string())?.path();
                     if color.is_dir() {
                         let set = format!(
-                            "bar--{}-{}",
+                            "bar/{}-{}",
                             style.file_name().unwrap().to_string_lossy(),
                             color.file_name().unwrap().to_string_lossy()
                         );
