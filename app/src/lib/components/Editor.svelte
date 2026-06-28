@@ -6,24 +6,9 @@
   import { editor } from "$lib/editor/editorState.svelte";
   import { sensors } from "$lib/sensors/live.svelte";
   import { savePanel, loadPanel } from "$lib/editor/persist";
-  import { importAida64Layout } from "$lib/aida64/import";
 
   let msg = $state("");
   let showAssets = $state(true);
-
-  // 当面は素材フォルダの絶対パス固定（後でフォルダ選択ダイアログに）
-  const AIDA64_ASSETS = "D:/VSCode/PC Status/aida64-skin-final-assets-v3";
-
-  // レイアウト一括取込（プリセット読込）。主役は個別のアセット割当（下のライブラリ）。
-  async function doImportAida64(): Promise<void> {
-    try {
-      const panel = await importAida64Layout(AIDA64_ASSETS);
-      editor.replacePanel(panel);
-      msg = "AIDA64レイアウト(プリセット)を取り込みました";
-    } catch (e) {
-      msg = "取込失敗: " + e;
-    }
-  }
 
   async function doSave(): Promise<void> {
     try {
@@ -50,7 +35,6 @@
     <button onclick={doSave}>保存</button>
     <button onclick={doLoad}>読込</button>
     <button onclick={() => (showAssets = !showAssets)}>アセット{showAssets ? "▼" : "▲"}</button>
-    <button onclick={doImportAida64} title="layout.jsonを一括再現（プリセット）">プリセット</button>
     <span class="sep">|</span>
     <label class="size">レイアウト幅 <input type="number" min="100" bind:value={editor.panel.size.w} /></label>
     <label class="size">高さ <input type="number" min="100" bind:value={editor.panel.size.h} /></label>

@@ -165,35 +165,6 @@ fn open_assets_dir() -> Result<(), String> {
     Ok(())
 }
 
-// フォルダ src_dir 内の画像を Assets/<set_name>/ にコピーし、コピー後の画像パス一覧を返す。
-#[tauri::command]
-fn import_asset_folder(src_dir: String, set_name: String) -> Result<Vec<String>, String> {
-    let dest = assets_dir().join(&set_name);
-    std::fs::create_dir_all(&dest).map_err(|e| e.to_string())?;
-    for entry in std::fs::read_dir(&src_dir).map_err(|e| e.to_string())? {
-        let p = entry.map_err(|e| e.to_string())?.path();
-        if p.is_file() && is_image(&p) {
-            if let Some(name) = p.file_name() {
-                std::fs::copy(&p, dest.join(name)).map_err(|e| e.to_string())?;
-            }
-        }
-    }
-    Ok(images_in(&dest))
-}
-
-// 単一ファイルを Assets/<set_name>/ にコピーし、コピー後の絶対パスを返す。
-#[tauri::command]
-fn import_asset_file(src_file: String, set_name: String) -> Result<String, String> {
-    let dest = assets_dir().join(&set_name);
-    std::fs::create_dir_all(&dest).map_err(|e| e.to_string())?;
-    let name = std::path::Path::new(&src_file)
-        .file_name()
-        .ok_or_else(|| "invalid file name".to_string())?;
-    let dp = dest.join(name);
-    std::fs::copy(&src_file, &dp).map_err(|e| e.to_string())?;
-    Ok(dp.to_string_lossy().to_string())
-}
-
 // Assets/ 以下を再帰的にたどり、画像を直接含むフォルダ＝1セットとして集める。
 // セット名は Assets からの相対パス（例 "backgrounds", "round/gradient-heat", "bar/barcode-cream"）。
 fn collect_sets(base: &std::path::Path, dir: &std::path::Path, out: &mut Vec<AssetSet>) {
@@ -232,62 +203,6 @@ fn list_asset_sets() -> Result<Vec<AssetSet>, String> {
     Ok(sets)
 }
 
-// AIDA64 素材パック(src_root)を Assets/ にセット単位で取り込む。作成セット名一覧を返す。
-#[tauri::command]
-fn import_aida64_pack(src_root: String) -> Result<Vec<String>, String> {
-    let root = std::path::Path::new(&src_root);
-    let mut created: Vec<String> = vec![];
-
-    // 背景（base/variations/preview を backgrounds セットへ）
-    for sub in ["backgrounds/base-for-dynamic", "backgrounds/variations", "backgrounds/final-selected-preview"] {
-        let dir = root.join(sub);
-        if dir.is_dir() {
-            let _ = import_asset_folder(dir.to_string_lossy().to_string(), "backgrounds".into());
-        }
-    }
-    if assets_dir().join("backgrounds").is_dir() {
-        created.push("backgrounds".into());
-    }
-
-    // 丸ゲージ: custom-gauge-states/round/<name>
-    let round = root.join("custom-gauge-states/round");
-    if round.is_dir() {
-        for e in std::fs::read_dir(&round).map_err(|x| x.to_string())? {
-            let p = e.map_err(|x| x.to_string())?.path();
-            if p.is_dir() {
-                let set = format!("round/{}", p.file_name().unwrap().to_string_lossy());
-                import_asset_folder(p.to_string_lossy().to_string(), set.clone())?;
-                created.push(set);
-            }
-        }
-    }
-
-    // 横バー: custom-gauge-states/horizontal/<style>/<color>
-    let horiz = root.join("custom-gauge-states/horizontal");
-    if horiz.is_dir() {
-        for style_e in std::fs::read_dir(&horiz).map_err(|x| x.to_string())? {
-            let style = style_e.map_err(|x| x.to_string())?.path();
-            if style.is_dir() {
-                for color_e in std::fs::read_dir(&style).map_err(|x| x.to_string())? {
-                    let color = color_e.map_err(|x| x.to_string())?.path();
-                    if color.is_dir() {
-                        let set = format!(
-                            "bar/{}-{}",
-                            style.file_name().unwrap().to_string_lossy(),
-                            color.file_name().unwrap().to_string_lossy()
-                        );
-                        import_asset_folder(color.to_string_lossy().to_string(), set.clone())?;
-                        created.push(set);
-                    }
-                }
-            }
-        }
-    }
-
-    created.sort();
-    Ok(created)
-}
-
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -299,7 +214,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             greet, save_panel, load_panel, read_text_file, list_dir_images,
-            assets_root, open_assets_dir, import_asset_folder, import_asset_file, list_asset_sets, import_aida64_pack
+            assets_root, open_assets_dir, list_asset_sets
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
