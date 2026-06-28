@@ -10,13 +10,16 @@ using LibreHardwareMonitor.Hardware;
 
 var stdout = new StreamWriter(Console.OpenStandardOutput(), new UTF8Encoding(false)) { AutoFlush = false };
 
+// --lhm 指定時は HWiNFO を使わず LHM 経路を強制（ネイティブ取得の検証・利用に使う）
+bool forceLhm = args.Contains("--lhm");
+
 Computer? computer = null;
 UpdateVisitor? visitor = null;
 
 while (true)
 {
     string source;
-    List<SensorDto>? sensors = HwInfo.TryRead();
+    List<SensorDto>? sensors = forceLhm ? null : HwInfo.TryRead();
     if (sensors != null)
     {
         source = "HWiNFO";
