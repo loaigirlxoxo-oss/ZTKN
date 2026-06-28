@@ -9,6 +9,7 @@
   import { savePanel, loadPanel } from "$lib/editor/persist";
   import { templates } from "$lib/templates";
   import { view } from "$lib/editor/view.svelte";
+  import { monitorStore, loadMonitors, selectMonitor, monitorLabel } from "$lib/editor/monitors.svelte";
 
   let msg = $state("");
   let showAssets = $state(true);
@@ -29,6 +30,8 @@
     const zh = (wrapEl.clientHeight - 32) / editor.panel.size.h;
     editor.zoom = Math.max(0.1, Math.min(zw, zh));
   }
+
+  loadMonitors(); // 接続中ディスプレイ一覧を取得（表示モニタ選択用）
 
   // キーボードショートカット（フォーム入力中はネイティブに任せる）
   onMount(() => {
@@ -80,6 +83,11 @@
     <button onclick={() => editor.undo()} disabled={!editor.canUndo} title="元に戻す (Ctrl+Z)">↶</button>
     <button onclick={() => editor.redo()} disabled={!editor.canRedo} title="やり直し (Ctrl+Y)">↷</button>
     <button onclick={() => (showAssets = !showAssets)}>アセット{showAssets ? "▼" : "▲"}</button>
+    {#if monitorStore.list.length > 1}
+      <select title="表示するモニタ" value={monitorStore.selected} onchange={(e) => selectMonitor(+e.currentTarget.value)}>
+        {#each monitorStore.list as m, i}<option value={i}>{monitorLabel(m, i)}</option>{/each}
+      </select>
+    {/if}
     <button onclick={() => (view.present = true)} title="フルスクリーン表示（Escで戻る）">▶ 表示</button>
     <select title="テンプレを選んで読み込む" onchange={(e) => { const v = e.currentTarget.value; if (v !== "") loadTemplate(+v); e.currentTarget.value = ""; }}>
       <option value="">テンプレ…</option>

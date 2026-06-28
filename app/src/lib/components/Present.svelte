@@ -2,16 +2,31 @@
   import { onMount } from "svelte";
   import CanvasStage from "./CanvasStage.svelte";
   import { view } from "$lib/editor/view.svelte";
+  import { selectedMonitor } from "$lib/editor/monitors.svelte";
   import { getCurrentWindow } from "@tauri-apps/api/window";
+  import { PhysicalPosition } from "@tauri-apps/api/dpi";
 
   async function exitPresent(): Promise<void> {
     view.present = false;
     try { await getCurrentWindow().setFullscreen(false); } catch { /* 非Tauri実行時は無視 */ }
   }
 
+  // 選択モニタへウィンドウを移してからフルスクリーン化する。
+  // （setFullscreenは「今ウィンドウが乗っているモニタ」を全画面化するため、先に移動が必要）
+  async function enterPresent(): Promise<void> {
+    const w = getCurrentWindow();
+    try {
+      const m = selectedMonitor();
+      if (m) {
+        await w.setFullscreen(false);
+        await w.setPosition(new PhysicalPosition(m.position.x, m.position.y));
+      }
+      await w.setFullscreen(true);
+    } catch { /* 非Tauri実行時は無視 */ }
+  }
+
   onMount(() => {
-    // 入った瞬間にフルスクリーン化。Esc またはダブルクリックで編集へ戻る。
-    getCurrentWindow().setFullscreen(true).catch(() => {});
+    enterPresent();
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") { e.preventDefault(); exitPresent(); } };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
