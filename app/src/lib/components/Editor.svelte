@@ -10,6 +10,7 @@
   import { templates } from "$lib/templates";
   import { view } from "$lib/editor/view.svelte";
   import { monitorStore, loadMonitors, selectMonitor, monitorLabel } from "$lib/editor/monitors.svelte";
+  import { autostartStore, loadAutostart, toggleAutostart } from "$lib/editor/autostart.svelte";
 
   let msg = $state("");
   let showAssets = $state(true);
@@ -32,6 +33,7 @@
   }
 
   loadMonitors(); // 接続中ディスプレイ一覧を取得（表示モニタ選択用）
+  loadAutostart(); // OS自動起動の現在状態を取得
 
   // キーボードショートカット（フォーム入力中はネイティブに任せる）
   onMount(() => {
@@ -89,6 +91,10 @@
       </select>
     {/if}
     <button onclick={() => (view.present = true)} title="フルスクリーン表示（Escで戻る）">▶ 表示</button>
+    <label class="auto" title="OSログイン時に自動起動（トレイ常駐で開始）">
+      <input type="checkbox" checked={autostartStore.enabled} disabled={!autostartStore.ready}
+        onchange={(e) => toggleAutostart(e.currentTarget.checked)} /> 自動起動
+    </label>
     <select title="テンプレを選んで読み込む" onchange={(e) => { const v = e.currentTarget.value; if (v !== "") loadTemplate(+v); e.currentTarget.value = ""; }}>
       <option value="">テンプレ…</option>
       {#each templates as t, i}<option value={i}>{t.name}</option>{/each}
@@ -131,6 +137,7 @@
   .sep { color: #444; }
   .size { color: #aaa; font-size: 12px; display: flex; align-items: center; gap: 4px; }
   .size input { width: 70px; background: #222; color: #ddd; border: 1px solid #3a3a3a; }
+  .auto { color: #aaa; font-size: 12px; display: flex; align-items: center; gap: 3px; }
   .sensor-status { color: #8ab; font-size: 12px; }
   .msg { color: #00ffcc; font-size: 12px; }
   .editor { display: flex; align-items: stretch; flex: 1 1 auto; min-height: 0; }

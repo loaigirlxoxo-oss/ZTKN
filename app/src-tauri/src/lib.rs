@@ -275,10 +275,22 @@ fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        // OSログイン時の自動起動（Windowsはレジストリ Run キー）。--minimized 付きで起動。
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            Some(vec!["--minimized"]),
+        ))
         .setup(|app| {
             let _ = std::fs::create_dir_all(assets_dir()); // 起動時にAssetsを必ず用意
             start_sensor_sidecar(app.handle().clone());
             setup_tray(app.handle())?; // タスクトレイ常駐
+            // 自動起動(--minimized)時はウィンドウを出さずトレイ常駐で開始
+            if std::env::args().any(|a| a == "--minimized") {
+                use tauri::Manager;
+                if let Some(w) = app.get_webview_window("main") {
+                    let _ = w.hide();
+                }
+            }
             Ok(())
         })
         // 閉じる(×)では終了せずトレイへ格納＝常駐。終了はトレイメニューから。
