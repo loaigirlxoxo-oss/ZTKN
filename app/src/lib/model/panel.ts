@@ -26,6 +26,7 @@ export interface PanelItem {
   opacity: number;
   sensorSrc?: string;
   sensorSum?: string[];       // 指定時は複数センサーの合算値を使う（例: 全体電力=CPU+GPU）
+  valueScale?: number;        // 表示値に掛ける係数（例: KB/s→Kbps は 8）
   style: Style;
   range?: [number, number];   // 無ければグラフは自動スケール
   asset?: string;

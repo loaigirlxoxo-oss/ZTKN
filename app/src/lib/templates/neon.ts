@@ -65,7 +65,7 @@ export function buildNeonTemplate(): Panel {
   // --- 中央：ネットワーク / 電力 / 時計 ---
   label("NETWORK  ↓ / ↑", 660, 56, 14, COOL);
   const graph = createItem("GraphLine", { x: 660, y: 84 });
-  graph.rect.w = 600; graph.rect.h = 150; graph.unit = "Kbps"; graph.autoUnit = true; graph.bgOpacity = 0.25;
+  graph.rect.w = 600; graph.rect.h = 150; graph.unit = "Kbps"; graph.autoUnit = true; graph.bgOpacity = 0.25; graph.valueScale = 8; // KB/s→Kbps
   graph.graphStyle = "dual-mirrored"; graph.style.color = COOL; graph.color2 = PINK;
   graph.sensorSrc = netDown; graph.sensorSrc2 = netUp;
   add(graph);

@@ -43,7 +43,7 @@ export function buildMinimalTemplate(): Panel {
   const clab = createItem("Label", { x: xs[3], y: 200 }); clab.format = "CLOCK"; clab.style.fontSize = 16; clab.style.color = "#8aa"; clab.rect.w = 360; add(clab);
 
   const graph = createItem("GraphLine", { x: 80, y: 350 });
-  graph.rect.w = 1760; graph.rect.h = 100; graph.unit = "Kbps"; graph.autoUnit = true; graph.bgOpacity = 0.2;
+  graph.rect.w = 1760; graph.rect.h = 100; graph.unit = "Kbps"; graph.autoUnit = true; graph.bgOpacity = 0.2; graph.valueScale = 8; // KB/s→Kbps
   graph.graphStyle = "filled"; graph.style.color = "#00d2c4"; graph.sensorSrc = netDown;
   add(graph);
 

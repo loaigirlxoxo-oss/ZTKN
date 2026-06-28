@@ -90,6 +90,7 @@
         </select>
       </label>
       <label>単位を自動換算 <input type="checkbox" bind:checked={item.autoUnit} onchange={changed} /></label>
+      <label>値倍率 <input type="number" step="0.1" bind:value={item.valueScale} oninput={changed} placeholder="1" /></label>
       <label>自動スケール <input type="checkbox" checked={!item.range} onchange={toggleAuto} /></label>
       <label>スケール表示 <input type="checkbox" bind:checked={item.showScale} onchange={changed} /></label>
       <label>スタイル

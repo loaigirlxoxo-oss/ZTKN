@@ -19,15 +19,16 @@
   const updaters = new Map<string, (v: number) => void>(); // 値だけ更新する関数
 
   function valueFor(item: PanelItem): number {
+    const scale = item.valueScale ?? 1;
     if (item.sensorSum && item.sensorSum.length) {
       let sum = 0, any = false;
       for (const id of item.sensorSum) {
         const v = editor.values.get(id);
         if (v !== undefined && Number.isFinite(v)) { sum += v; any = true; }
       }
-      return any ? sum : NaN;
+      return any ? sum * scale : NaN;
     }
-    return item.sensorSrc ? (editor.values.get(item.sensorSrc) ?? NaN) : NaN;
+    return item.sensorSrc ? (editor.values.get(item.sensorSrc) ?? NaN) * scale : NaN;
   }
 
   // 値+単位を描く共通処理。数値は右寄せで右端固定、単位は固定位置に置くので
@@ -249,9 +250,11 @@
       if (midLabel) g.add(midLabel);
       if (botLabel) g.add(botLabel);
       const fmt = (n: number) => (Math.abs(n) >= 100 ? String(Math.round(n)) : n.toFixed(1));
+      const vscale = item.valueScale ?? 1;
+      const scaled = (a: number[]) => (vscale === 1 ? a : a.map((v) => v * vscale));
       const apply = () => {
-        const hist = item.sensorSrc ? (editor.history.get(item.sensorSrc) ?? []) : [];
-        const hist2 = isDual && item.sensorSrc2 ? (editor.history.get(item.sensorSrc2) ?? []) : [];
+        const hist = scaled(item.sensorSrc ? (editor.history.get(item.sensorSrc) ?? []) : []);
+        const hist2 = scaled(isDual && item.sensorSrc2 ? (editor.history.get(item.sensorSrc2) ?? []) : []);
         // 2本系は両方を同じスケールで（比較できるように）
         const [mn, mx] = graphScale([...hist, ...hist2], item.range);
         graph.setAttr("pts", historyToPoints(hist, w, h, [mn, mx]));
