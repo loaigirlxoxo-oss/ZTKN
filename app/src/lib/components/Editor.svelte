@@ -95,44 +95,54 @@
 
 <div class="column">
   <div class="toolbar">
-    <input class="pname" type="text" bind:value={panelName} placeholder="パネル名" title="保存名" />
-    <button onclick={doSave} title="この名前で保存（既存なら上書き）">保存</button>
-    <select class="ploadsel" title="保存済みパネルを読み込む" value="" onchange={(e) => { const v = e.currentTarget.value; if (v) doLoad(v); e.currentTarget.value = ""; }}>
+    <div class="namecol">
+      <input class="pname" type="text" bind:value={panelName} placeholder="パネル名" title="保存名" />
+      <button onclick={doSave} title="この名前で保存（既存なら上書き）">保存</button>
+    </div>
+    <select class="ploadsel" title="保存済みパネル／テンプレを読み込む" value="" onchange={(e) => { const v = e.currentTarget.value; if (v.startsWith("t:")) loadTemplate(+v.slice(2)); else if (v.startsWith("s:")) doLoad(v.slice(2)); e.currentTarget.value = ""; }}>
       <option value="">読込…</option>
-      {#each savedList as n}<option value={n}>{n}</option>{/each}
+      {#if savedList.length}
+        <optgroup label="保存済み">
+          {#each savedList as n}<option value={"s:" + n}>{n}</option>{/each}
+        </optgroup>
+      {/if}
+      <optgroup label="テンプレート">
+        {#each templates as t, i}<option value={"t:" + i}>{t.name}</option>{/each}
+      </optgroup>
     </select>
     <button onclick={() => editor.undo()} disabled={!editor.canUndo} title="元に戻す (Ctrl+Z)">↶</button>
     <button onclick={() => editor.redo()} disabled={!editor.canRedo} title="やり直し (Ctrl+Y)">↷</button>
-    <button onclick={() => (showAssets = !showAssets)}>アセット{showAssets ? "▼" : "▲"}</button>
-    {#if monitorStore.list.length > 1}
-      <select title="表示するモニタ" value={monitorStore.selected} onchange={(e) => selectMonitor(+e.currentTarget.value)}>
-        {#each monitorStore.list as m, i}<option value={i}>{monitorLabel(m, i)}</option>{/each}
-      </select>
-    {/if}
-    <button onclick={() => (view.present = true)} title="フルスクリーン表示（Escで戻る）">▶ 表示</button>
+    <div class="stack2">
+      {#if monitorStore.list.length > 1}
+        <select title="表示するモニタ" value={monitorStore.selected} onchange={(e) => selectMonitor(+e.currentTarget.value)}>
+          {#each monitorStore.list as m, i}<option value={i}>{monitorLabel(m, i)}</option>{/each}
+        </select>
+      {/if}
+      <button onclick={() => (view.present = true)} title="フルスクリーン表示（Escで戻る）">▶ 表示</button>
+    </div>
     <label class="auto" title="OSログイン時に自動起動（トレイ常駐で開始）">
       <input type="checkbox" checked={autostartStore.enabled} disabled={!autostartStore.ready}
         onchange={(e) => toggleAutostart(e.currentTarget.checked)} /> 自動起動
     </label>
-    <select title="テンプレを選んで読み込む" onchange={(e) => { const v = e.currentTarget.value; if (v !== "") loadTemplate(+v); e.currentTarget.value = ""; }}>
-      <option value="">テンプレ…</option>
-      {#each templates as t, i}<option value={i}>{t.name}</option>{/each}
-    </select>
     <span class="sep">|</span>
-    <label class="size">レイアウト幅 <input type="number" min="100" bind:value={editor.panel.size.w} /></label>
-    <label class="size">高さ <input type="number" min="100" bind:value={editor.panel.size.h} /></label>
+    <div class="stack2">
+      <label class="size">幅 <input type="number" min="100" bind:value={editor.panel.size.w} /></label>
+      <label class="size">高さ <input type="number" min="100" bind:value={editor.panel.size.h} /></label>
+    </div>
     <span class="sep">|</span>
-    <label class="size">表示
-      <select bind:value={editor.zoom}>
-        <option value={0.25}>25%</option>
-        <option value={0.5}>50%</option>
-        <option value={0.75}>75%</option>
-        <option value={1}>100%</option>
-        <option value={1.5}>150%</option>
-        <option value={2}>200%</option>
-      </select>
-    </label>
-    <button onclick={fitZoom}>フィット</button>
+    <div class="stack2">
+      <label class="size">表示
+        <select bind:value={editor.zoom}>
+          <option value={0.25}>25%</option>
+          <option value={0.5}>50%</option>
+          <option value={0.75}>75%</option>
+          <option value={1}>100%</option>
+          <option value={1.5}>150%</option>
+          <option value={2}>200%</option>
+        </select>
+      </label>
+      <button onclick={fitZoom}>フィット</button>
+    </div>
     <span class="sep">|</span>
     <span class="align" title="整列（2つ以上選択）/ 等間隔（3つ以上）">
       <button onclick={() => editor.align("left")} disabled={editor.selectedIds.length < 2} title="左揃え">⇤</button>
@@ -156,15 +166,21 @@
     <Properties />
   </div>
 
-  {#if showAssets}
-    <div class="drawer"><AssetLibrary /></div>
-  {/if}
+  <div class="drawer" class:collapsed={!showAssets}>
+    <AssetLibrary open={showAssets} ontoggle={() => (showAssets = !showAssets)} />
+  </div>
 </div>
 
 <style>
   .column { display: flex; flex-direction: column; height: 100vh; }
-  .toolbar { display: flex; gap: 8px; align-items: center; padding: 6px 8px; background: #111; border-bottom: 1px solid #222; flex: 0 0 auto; }
+  .toolbar { display: flex; flex-wrap: wrap; gap: 8px; row-gap: 6px; align-items: center; padding: 6px 8px; background: #111; border-bottom: 1px solid #222; flex: 0 0 auto; }
   .toolbar button { padding: 4px 12px; background: #2a2a2a; color: #ddd; border: 1px solid #3a3a3a; cursor: pointer; }
+  .toolbar select { max-width: 160px; }
+  .namecol { display: flex; flex-direction: column; gap: 3px; }
+  .namecol .pname { width: 110px; }
+  .namecol button { padding: 3px 12px; }
+  .stack2 { display: flex; flex-direction: column; gap: 3px; }
+  .stack2 button { padding: 3px 12px; }
   .sep { color: #444; }
   .size { color: #aaa; font-size: 12px; display: flex; align-items: center; gap: 4px; }
   .size input { width: 70px; background: #222; color: #ddd; border: 1px solid #3a3a3a; }
@@ -173,10 +189,11 @@
   .ploadsel { background: #2a2a2a; color: #ddd; border: 1px solid #3a3a3a; }
   .align { display: flex; align-items: center; gap: 2px; }
   .align button { padding: 2px 7px; font-size: 13px; line-height: 1; }
-  .sensor-status { color: #8ab; font-size: 12px; }
+  .sensor-status { color: #8ab; font-size: 12px; margin-left: auto; }
   .mini { padding: 2px 6px; background: #2a2a2a; color: #ddd; border: 1px solid #3a3a3a; cursor: pointer; }
   .msg { color: #00ffcc; font-size: 12px; }
   .editor { display: flex; align-items: stretch; flex: 1 1 auto; min-height: 0; }
   .canvas-wrap { flex: 1; padding: 16px; overflow: auto; height: 100%; }
   .drawer { flex: 0 0 38vh; min-height: 0; }
+  .drawer.collapsed { flex: 0 0 auto; }
 </style>

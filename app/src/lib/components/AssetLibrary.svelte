@@ -8,6 +8,8 @@
   import { pickSensor } from "$lib/sensors/match";
   import { loadImage } from "$lib/render/images";
 
+  let { open = true, ontoggle }: { open?: boolean; ontoggle?: () => void } = $props();
+
   // 1枚絵（image/ フォルダ。Assetsとは別の浅い置き場）
   let images = $state<string[]>([]);
   async function refreshImages(): Promise<void> {
@@ -194,7 +196,7 @@
 
 <div class="lib">
   <div class="head">
-    <strong>アセット</strong>
+    <button class="toggle" title={open ? "アセットを畳む" : "アセットを開く"} onclick={ontoggle}>アセット{open ? "▼" : "▲"}</button>
     <button onclick={() => { library.refresh(); refreshImages(); }}>更新</button>
     <button onclick={() => library.openFolder()}>Assetsを開く</button>
     <button onclick={() => invoke("open_images_dir")}>画像を開く</button>
@@ -203,6 +205,7 @@
     {#if editor.selected?.kind === "Gauge"}<span class="hint">→ 選択中ゲージに割当</span>{/if}
   </div>
 
+  {#if open}
   <div class="scroll">
     {#if library.sets.length === 0}
       <div class="empty">
@@ -287,12 +290,14 @@
       <div class="empty">認識できる素材（背景／連番ゲージ／線グラフ／枠）が見つかりませんでした。</div>
     {/if}
   </div>
+  {/if}
 </div>
 
 <style>
   .lib { background: #141414; border-top: 1px solid #2a2a2a; color: #ccc; display: flex; flex-direction: column; height: 100%; }
   .head { display: flex; align-items: center; gap: 8px; padding: 5px 8px; flex: 0 0 auto; border-bottom: 1px solid #222; }
   .head button { padding: 3px 10px; background: #2a2a2a; color: #ddd; border: 1px solid #3a3a3a; cursor: pointer; }
+  .toggle { background: #00d2c4 !important; color: #042 !important; border-color: #00d2c4 !important; font-weight: bold; }
   .msg { color: #00ffcc; font-size: 12px; }
   .hint { color: #8ab; font-size: 12px; }
   .scroll { flex: 1 1 auto; overflow-y: auto; padding: 4px 8px 10px; }
