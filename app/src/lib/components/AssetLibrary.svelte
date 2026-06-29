@@ -3,7 +3,7 @@
   import { convertFileSrc, invoke } from "@tauri-apps/api/core";
   import { library, type AssetSet } from "$lib/assets/library.svelte";
   import { editor } from "$lib/editor/editorState.svelte";
-  import { createItem } from "$lib/model/panel";
+  import { createItem, type GraphStyle } from "$lib/model/panel";
   import { sensors } from "$lib/sensors/live.svelte";
   import { pickSensor } from "$lib/sensors/match";
   import { loadImage } from "$lib/render/images";
@@ -36,11 +36,6 @@
     editor.bumpStructure();
   }
   const fileName = (p: string) => p.split(/[\\/]/).pop() ?? p;
-
-  type GraphStyle =
-    | "line" | "filled" | "dots" | "spike"
-    | "dual-basic" | "dual-crossing" | "dual-mirrored" | "dual-filled-split"
-    | "dual-bars" | "dual-dotted" | "dual-scanband" | "dual-linedot";
 
   onMount(() => { library.refresh(); });
 

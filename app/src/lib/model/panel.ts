@@ -25,6 +25,12 @@ export type GaugeRender =
   // 値で切り替える連番画像（AIDA64 Custom Gauge の state-01..state-NN）。frames は絶対パスの配列。
   | { mode: "StateFrames"; frames: string[] };
 
+// 線グラフの描画スタイル（単一線4種＋2本系8種）。AssetLibrary/Properties/CanvasStage 共通。
+export type GraphStyle =
+  | "line" | "filled" | "dots" | "spike"
+  | "dual-basic" | "dual-crossing" | "dual-mirrored" | "dual-filled-split"
+  | "dual-bars" | "dual-dotted" | "dual-scanband" | "dual-linedot";
+
 export interface PanelItem {
   id: string;
   kind: ItemKind;
@@ -43,11 +49,7 @@ export interface PanelItem {
   unit?: string;              // グラフ等のスケール表示に付ける単位（例 "Mbps"）
   autoUnit?: boolean;         // グラフ単位をスケールに応じ自動換算するか（false=入力した単位を固定）
   showScale?: boolean;        // グラフの目盛りラベル＋グリッド線を表示するか
-  // 線グラフの描画スタイル（単一線4種＋2本系7種）
-  graphStyle?:
-    | "line" | "filled" | "dots" | "spike"
-    | "dual-basic" | "dual-crossing" | "dual-mirrored" | "dual-filled-split"
-    | "dual-bars" | "dual-dotted" | "dual-scanband" | "dual-linedot";
+  graphStyle?: GraphStyle;
   sensorSrc2?: string;        // 2本グラフの第2センサー（上り等）
   color2?: string;            // 第2線の色
   bgColor?: string;           // 背景色（グラフ/バー/ゲージのトラック）

@@ -24,7 +24,3 @@ export function loadImage(path: string): Promise<HTMLImageElement> {
   }
   return p;
 }
-
-export async function preloadAll(paths: string[]): Promise<void> {
-  await Promise.allSettled(paths.map((p) => loadImage(p)));
-}
