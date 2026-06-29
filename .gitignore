@@ -24,6 +24,7 @@ tools/sensor-sidecar/out.txt
 # 取り込んだアセット（ユーザーコンテンツ・生成物）
 app/Assets/
 app/image/
+app/Panels/
 
 # 素材パック（ユーザーコンテンツ・大容量）
 aida64-skin-*/

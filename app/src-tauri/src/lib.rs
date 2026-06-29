@@ -3,12 +3,6 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use tauri::{AppHandle, Emitter, Manager};
 
-// Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-#[tauri::command]
-fn greet(name: &str) -> String {
-    format!("Hello, {}! You've been greeted from Rust!", name)
-}
-
 // センサーサイドカー(.NET)の実行ファイルパスを解決する。
 // 配布版はバンドルされたリソース(resource_dir/sensor-sidecar.exe)、
 // dev では src-tauri/binaries（CARGO_MANIFEST_DIR 基準）にフォールバック。
@@ -64,10 +58,13 @@ fn start_sensor_sidecar(app: AppHandle) {
     });
 }
 
+// 保存パネルの置き場。Assets/image と同じ規約でアプリ基準に置く
+// （debug=app/Panels, 製品=exe/Panels）。ホームディレクトリには置かない。
 fn panels_dir() -> PathBuf {
-    let mut dir = dirs::home_dir().expect("home dir");
-    dir.push("PCStatusPanels");
-    dir
+    let mut d = assets_dir();
+    d.pop(); // "Assets" を外して基準ディレクトリへ
+    d.push("Panels");
+    d
 }
 
 #[tauri::command]
@@ -116,12 +113,7 @@ fn list_dir_images(dir: String) -> Result<Vec<String>, String> {
         .map_err(|e| e.to_string())?
         .filter_map(|e| e.ok())
         .map(|e| e.path())
-        .filter(|p| {
-            p.extension()
-                .and_then(|x| x.to_str())
-                .map(|x| matches!(x.to_ascii_lowercase().as_str(), "png" | "jpg" | "jpeg" | "webp" | "gif"))
-                .unwrap_or(false)
-        })
+        .filter(|p| is_image(p))
         .map(|p| p.to_string_lossy().to_string())
         .collect();
     files.sort();
@@ -154,10 +146,13 @@ fn assets_dir() -> PathBuf {
     }
 }
 
+// 対応画像拡張子（連番ゲージ取り込み・1枚絵一覧で共通）
+const IMAGE_EXTS: &[&str] = &["png", "jpg", "jpeg", "webp", "gif"];
+
 fn is_image(p: &std::path::Path) -> bool {
     p.extension()
         .and_then(|x| x.to_str())
-        .map(|x| matches!(x.to_ascii_lowercase().as_str(), "png" | "jpg" | "jpeg" | "webp" | "gif"))
+        .map(|x| IMAGE_EXTS.contains(&x.to_ascii_lowercase().as_str()))
         .unwrap_or(false)
 }
 
@@ -352,7 +347,7 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
-            greet, save_panel, load_panel, list_panels, read_text_file, list_dir_images,
+            save_panel, load_panel, list_panels, read_text_file, list_dir_images,
             assets_root, open_assets_dir, list_asset_sets, list_fonts, list_images, open_images_dir
         ])
         .run(tauri::generate_context!())
