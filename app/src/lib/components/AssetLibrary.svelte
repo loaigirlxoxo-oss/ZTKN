@@ -1,11 +1,39 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { convertFileSrc } from "@tauri-apps/api/core";
+  import { convertFileSrc, invoke } from "@tauri-apps/api/core";
   import { library, type AssetSet } from "$lib/assets/library.svelte";
   import { editor } from "$lib/editor/editorState.svelte";
   import { createItem } from "$lib/model/panel";
   import { sensors } from "$lib/sensors/live.svelte";
   import { pickSensor } from "$lib/sensors/match";
+  import { loadImage } from "$lib/render/images";
+
+  // 1枚絵（image/ フォルダ。Assetsとは別の浅い置き場）
+  let images = $state<string[]>([]);
+  async function refreshImages(): Promise<void> {
+    try { images = await invoke<string[]>("list_images"); } catch { images = []; }
+  }
+  onMount(refreshImages);
+
+  // 選択中Imageに割当（未選択/別種なら新規Image作成）。サイズは元画像の縦横比で初期化。
+  function assignImage(path: string): void {
+    let item = editor.selected;
+    if (!item || item.kind !== "Image") {
+      item = createItem("Image", { x: 80, y: 80 });
+      editor.panel.items.push(item);
+      editor.selectedId = item.id;
+    }
+    const it = item;
+    it.asset = path;
+    loadImage(path).then((img) => {
+      const maxW = 480, scale = Math.min(1, maxW / (img.naturalWidth || maxW));
+      it.rect.w = Math.max(8, Math.round((img.naturalWidth || 120) * scale));
+      it.rect.h = Math.max(8, Math.round((img.naturalHeight || 120) * scale));
+      editor.bumpStructure();
+    }).catch(() => {});
+    editor.bumpStructure();
+  }
+  const fileName = (p: string) => p.split(/[\\/]/).pop() ?? p;
 
   type GraphStyle =
     | "line" | "filled" | "dots" | "spike"
@@ -120,8 +148,9 @@
 <div class="lib">
   <div class="head">
     <strong>アセット</strong>
-    <button onclick={() => library.refresh()}>更新</button>
+    <button onclick={() => { library.refresh(); refreshImages(); }}>更新</button>
     <button onclick={() => library.openFolder()}>Assetsを開く</button>
+    <button onclick={() => invoke("open_images_dir")}>画像を開く</button>
     <button onclick={clearBackground}>背景クリア</button>
     <span class="msg">{library.msg}</span>
     {#if editor.selected?.kind === "Gauge"}<span class="hint">→ 選択中ゲージに割当</span>{/if}
@@ -134,6 +163,22 @@
         パック丸ごと入れてもOK（中の画像フォルダを自動でセットとして拾います）。
       </div>
     {/if}
+
+    <section>
+      <div class="label">画像（1枚絵）— クリックで配置／選択中の画像に割当</div>
+      {#if images.length}
+        <div class="grid">
+          {#each images as f}
+            <button class="cell sq" title={fileName(f)} onclick={() => assignImage(f)}>
+              <img src={convertFileSrc(f)} alt={fileName(f)} />
+              <span class="cap">{fileName(f)}</span>
+            </button>
+          {/each}
+        </div>
+      {:else}
+        <div class="empty">image フォルダが空です。「画像を開く」でフォルダを開いてPNG等を入れ、「更新」を押してください。</div>
+      {/if}
+    </section>
 
     {#if graphSets.length}
       <section>

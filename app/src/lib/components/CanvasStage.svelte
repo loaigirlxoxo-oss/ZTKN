@@ -55,6 +55,7 @@
   }
   let layer: Konva.Layer;
   let tr: Konva.Transformer;
+  let gifAnim: Konva.Animation | undefined; // GIFがある時だけレイヤーを毎フレーム再描画＝アニメ再生
   const groups = new Map<string, Konva.Group>();
   const outlines = new Map<string, Konva.Rect>(); // 複数選択時に各オブジェクトへ出す点線枠
   const updaters = new Map<string, (v: number) => void>(); // 値だけ更新する関数
@@ -137,12 +138,20 @@
   }
 
   // ローカル画像を Konva.Image として配置（未ロードなら後追いで差し込む）。
-  function addImageNode(g: Konva.Group, path: string, w: number, h: number): Konva.Image {
+  function addImageNode(g: Konva.Group, path: string, w: number, h: number, item?: PanelItem): Konva.Image {
     const node = new Konva.Image({ width: w, height: h, image: getImage(path) });
     g.add(node);
-    if (!getImage(path)) {
-      loadImage(path).then((img) => { node.image(img); node.getLayer()?.batchDraw(); }).catch(() => {});
-    }
+    // トリミング：元画像の自然サイズに対する割合で crop 矩形を算出（読み込み後に確定）
+    const applyCrop = (img: HTMLImageElement) => {
+      const l = item?.cropLeft ?? 0, r = item?.cropRight ?? 0, t = item?.cropTop ?? 0, b = item?.cropBottom ?? 0;
+      if (l || r || t || b) {
+        const nw = img.naturalWidth || img.width, nh = img.naturalHeight || img.height;
+        node.crop({ x: nw * l, y: nh * t, width: Math.max(1, nw * (1 - l - r)), height: Math.max(1, nh * (1 - t - b)) });
+      }
+    };
+    const cur = getImage(path);
+    if (cur) applyCrop(cur);
+    else loadImage(path).then((img) => { node.image(img); applyCrop(img); node.getLayer()?.batchDraw(); }).catch(() => {});
     return node;
   }
 
@@ -228,7 +237,13 @@
       };
       apply(v); updaters.set(item.id, apply);
     } else if (item.kind === "Image") {
-      if (item.asset) addImageNode(g, item.asset, item.rect.w, item.rect.h);
+      if (item.asset) {
+        addImageNode(g, item.asset, item.rect.w, item.rect.h, item);
+      } else if (!present) {
+        // 未割当の画像はエディタで見えるようプレースホルダ（表示専用では何も出さない）
+        g.add(new Konva.Rect({ width: item.rect.w, height: item.rect.h, stroke: "#5a5a5a", strokeWidth: 1, dash: [5, 4], fill: "rgba(255,255,255,0.04)" }));
+        g.add(new Konva.Text({ text: "🖼 画像未選択", x: 0, y: item.rect.h / 2 - 8, width: item.rect.w, align: "center", fontSize: 12, fill: "#888" }));
+      }
     } else if (item.kind === "Gauge" && item.gauge?.mode === "StateFrames") {
       const [min, max] = item.range ?? [0, 100];
       updaters.set(item.id, addStateFrames(g, item.gauge.frames, item.rect.w, item.rect.h, min, max, v));
@@ -492,6 +507,10 @@
     }
     applyValues();
     layer.draw();
+    // GIF（アニメ）があれば毎フレーム再描画して動かす。無ければ止める。
+    const hasGif = editor.panel.items.some((i) => i.kind === "Image" && /\.gif$/i.test(i.asset ?? ""));
+    if (hasGif) (gifAnim ??= new Konva.Animation(() => {}, layer)).start();
+    else gifAnim?.stop();
   }
 
   onMount(() => {
@@ -550,7 +569,7 @@
       window.addEventListener("resize", onResize);
       detachResize = () => window.removeEventListener("resize", onResize);
     }
-    return () => { detachWinUp?.(); detachResize?.(); };
+    return () => { detachWinUp?.(); detachResize?.(); gifAnim?.stop(); };
   });
 
   // 構造変更（追加/削除/リサイズ/プロパティ）だけで作り直す。

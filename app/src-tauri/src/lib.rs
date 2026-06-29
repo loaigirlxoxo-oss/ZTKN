@@ -112,7 +112,7 @@ fn list_dir_images(dir: String) -> Result<Vec<String>, String> {
         .filter(|p| {
             p.extension()
                 .and_then(|x| x.to_str())
-                .map(|x| matches!(x.to_ascii_lowercase().as_str(), "png" | "jpg" | "jpeg" | "webp"))
+                .map(|x| matches!(x.to_ascii_lowercase().as_str(), "png" | "jpg" | "jpeg" | "webp" | "gif"))
                 .unwrap_or(false)
         })
         .map(|p| p.to_string_lossy().to_string())
@@ -150,7 +150,7 @@ fn assets_dir() -> PathBuf {
 fn is_image(p: &std::path::Path) -> bool {
     p.extension()
         .and_then(|x| x.to_str())
-        .map(|x| matches!(x.to_ascii_lowercase().as_str(), "png" | "jpg" | "jpeg" | "webp"))
+        .map(|x| matches!(x.to_ascii_lowercase().as_str(), "png" | "jpg" | "jpeg" | "webp" | "gif"))
         .unwrap_or(false)
 }
 
@@ -180,6 +180,31 @@ fn open_assets_dir() -> Result<(), String> {
         .arg(&dir)
         .spawn()
         .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+// 1枚絵の置き場。Assets と並ぶ浅い "image/" フォルダ（debug=app/image, 製品=exe/image）。
+fn images_dir() -> PathBuf {
+    let mut d = assets_dir();
+    d.pop(); // "Assets" を外して基準ディレクトリへ
+    d.push("image");
+    d
+}
+
+// image/ 直下の画像（png/jpg/jpeg/webp）を絶対パス一覧で返す（無ければ作る）。
+#[tauri::command]
+fn list_images() -> Result<Vec<String>, String> {
+    let dir = images_dir();
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    Ok(images_in(&dir))
+}
+
+// エクスプローラで image フォルダを開く（無ければ作ってから）。
+#[tauri::command]
+fn open_images_dir() -> Result<(), String> {
+    let dir = images_dir();
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    std::process::Command::new("explorer").arg(&dir).spawn().map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -300,6 +325,7 @@ pub fn run() {
         ))
         .setup(|app| {
             let _ = std::fs::create_dir_all(assets_dir()); // 起動時にAssetsを必ず用意
+            let _ = std::fs::create_dir_all(images_dir()); // 1枚絵置き場 image/ も用意
             start_sensor_sidecar(app.handle().clone());
             setup_tray(app.handle())?; // タスクトレイ常駐
             // 自動起動(--minimized)時はウィンドウを出さずトレイ常駐で開始
@@ -320,7 +346,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             greet, save_panel, load_panel, list_panels, read_text_file, list_dir_images,
-            assets_root, open_assets_dir, list_asset_sets, list_fonts
+            assets_root, open_assets_dir, list_asset_sets, list_fonts, list_images, open_images_dir
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

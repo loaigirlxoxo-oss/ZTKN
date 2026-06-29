@@ -4,7 +4,8 @@ import { editor } from "$lib/editor/editorState.svelte";
 export interface LiveSensor { id: string; name: string; hw: string; type: string; unit: string; }
 interface RawSensor extends LiveSensor { value: number; }
 
-const CATALOG_KEY = "sensor-catalog-v2"; // 一度見たセンサーを記憶（ピッカー用）。v2=合成キーID方式
+const CATALOG_KEY = "sensor-catalog-v3"; // 一度見たセンサーを記憶（ピッカー用）。v3=合成キーID方式（旧版の混入を一掃）
+const OLD_KEYS = ["sensor-catalog-v1", "sensor-catalog-v2"]; // 旧ID方式の残骸。読まない＆掃除する
 const hasLS = typeof localStorage !== "undefined";
 
 // サイドカー(LHM)からの実センサーをフロントへ取り込むハブ。
@@ -20,6 +21,7 @@ class SensorHub {
   constructor() {
     // 前回のカタログを復元（emit前や欠落中でもピッカーに全件出す＝「見えるものだけ」を解消）
     if (hasLS) {
+      for (const k of OLD_KEYS) { try { localStorage.removeItem(k); } catch { /* 無視 */ } } // 旧版を掃除
       try {
         const raw = localStorage.getItem(CATALOG_KEY);
         if (raw) {

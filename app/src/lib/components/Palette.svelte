@@ -12,6 +12,7 @@
     { kind: "BarV", label: "▯ 縦バー" },
     { kind: "Box", label: "⬛ ボックス" },
     { kind: "Line", label: "— 線" },
+    { kind: "Image", label: "🖼 画像" },
   ];
 </script>
 

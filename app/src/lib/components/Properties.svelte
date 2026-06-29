@@ -2,6 +2,7 @@
   import { editor } from "$lib/editor/editorState.svelte";
   import { sensors, type LiveSensor } from "$lib/sensors/live.svelte";
   import { formatForUnit } from "$lib/render/format";
+  import { getImage, loadImage } from "$lib/render/images";
   import { fontStore, ensureFonts } from "$lib/fonts/installed.svelte";
 
   ensureFonts(); // インストール済みフォントを取得（多重防止済み）
@@ -44,6 +45,18 @@
       item.format = formatForUnit(s?.unit);
     }
     changed();
+  }
+
+  // クロップ時に縦横比を保つ：幅は保持し、高さを切り出し領域のアスペクトへ合わせる（歪み防止）
+  function fitCropAspect(): void {
+    const it = item;
+    if (!it || it.kind !== "Image" || !it.asset) return;
+    const img = getImage(it.asset);
+    if (!img) { loadImage(it.asset).then(() => { fitCropAspect(); changed(); }).catch(() => {}); return; }
+    const nw = img.naturalWidth || img.width, nh = img.naturalHeight || img.height;
+    const cw = nw * (1 - (it.cropLeft ?? 0) - (it.cropRight ?? 0));
+    const ch = nh * (1 - (it.cropTop ?? 0) - (it.cropBottom ?? 0));
+    if (cw > 0 && ch > 0) it.rect.h = Math.max(8, Math.round(it.rect.w * (ch / cw)));
   }
 
   function toggleBold(e: Event): void {
@@ -157,6 +170,13 @@
     {/if}
     {#if item.kind === "Line"}
       <label>太さ <input type="number" min="1" bind:value={item.lineWidth} oninput={changed} /></label>
+    {/if}
+    {#if item.kind === "Image"}
+      <label>左トリム <input type="range" min="0" max="0.95" step="0.01" value={item.cropLeft ?? 0} oninput={(e) => { item.cropLeft = +e.currentTarget.value; fitCropAspect(); changed(); }} /></label>
+      <label>右トリム <input type="range" min="0" max="0.95" step="0.01" value={item.cropRight ?? 0} oninput={(e) => { item.cropRight = +e.currentTarget.value; fitCropAspect(); changed(); }} /></label>
+      <label>上トリム <input type="range" min="0" max="0.95" step="0.01" value={item.cropTop ?? 0} oninput={(e) => { item.cropTop = +e.currentTarget.value; fitCropAspect(); changed(); }} /></label>
+      <label>下トリム <input type="range" min="0" max="0.95" step="0.01" value={item.cropBottom ?? 0} oninput={(e) => { item.cropBottom = +e.currentTarget.value; fitCropAspect(); changed(); }} /></label>
+      <button onclick={() => { item.cropLeft = 0; item.cropRight = 0; item.cropTop = 0; item.cropBottom = 0; fitCropAspect(); changed(); }}>トリム解除</button>
     {/if}
     {#if item.kind === "BarH" || item.kind === "BarV"}
       <label>2色グラデ <input type="checkbox" bind:checked={item.useGradient} onchange={changed} /></label>

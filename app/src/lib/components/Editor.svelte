@@ -7,6 +7,7 @@
   import { editor } from "$lib/editor/editorState.svelte";
   import { sensors } from "$lib/sensors/live.svelte";
   import { savePanel, loadPanel, listPanels } from "$lib/editor/persist";
+  import { invoke } from "@tauri-apps/api/core";
   import { templates } from "$lib/templates";
   import { view } from "$lib/editor/view.svelte";
   import { monitorStore, loadMonitors, selectMonitor, monitorLabel } from "$lib/editor/monitors.svelte";

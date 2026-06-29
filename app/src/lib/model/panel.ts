@@ -59,6 +59,11 @@ export interface PanelItem {
   cornerRadius?: number;      // Box の角丸半径（0=角張）
   borderWidth?: number;       // Box の枠線太さ
   lineWidth?: number;         // Line の太さ
+  // Image のトリミング（元画像に対する割合 0..1。各辺を内側へ削る量。未指定=0=トリムなし）
+  cropLeft?: number;
+  cropRight?: number;
+  cropTop?: number;
+  cropBottom?: number;
 }
 
 export interface Panel {
