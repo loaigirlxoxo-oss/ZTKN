@@ -1,7 +1,7 @@
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 #[tauri::command]
@@ -10,8 +10,15 @@ fn greet(name: &str) -> String {
 }
 
 // センサーサイドカー(.NET)の実行ファイルパスを解決する。
-// dev では src-tauri/binaries（CARGO_MANIFEST_DIR 基準）。
-fn sidecar_path() -> PathBuf {
+// 配布版はバンドルされたリソース(resource_dir/sensor-sidecar.exe)、
+// dev では src-tauri/binaries（CARGO_MANIFEST_DIR 基準）にフォールバック。
+fn sidecar_path(app: &AppHandle) -> PathBuf {
+    if let Ok(dir) = app.path().resource_dir() {
+        let p = dir.join("sensor-sidecar.exe");
+        if p.exists() {
+            return p;
+        }
+    }
     let mut p = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     p.push("binaries");
     p.push("sensor-sidecar-x86_64-pc-windows-msvc.exe");
@@ -22,7 +29,7 @@ fn sidecar_path() -> PathBuf {
 // フロントへ転送する。プロセスが落ちたら指数バックオフで再起動する（握りつぶさず通知）。
 fn start_sensor_sidecar(app: AppHandle) {
     std::thread::spawn(move || {
-        let path = sidecar_path();
+        let path = sidecar_path(&app);
         let mut backoff = 1u64;
         loop {
             match Command::new(&path)
