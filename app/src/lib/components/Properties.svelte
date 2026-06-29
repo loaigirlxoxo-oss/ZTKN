@@ -125,6 +125,8 @@
       <label>値倍率 <input type="number" step="0.1" bind:value={item.valueScale} oninput={changed} placeholder="1" /></label>
       <label>自動スケール <input type="checkbox" checked={!item.range} onchange={toggleAuto} /></label>
       <label>スケール表示 <input type="checkbox" bind:checked={item.showScale} onchange={changed} /></label>
+      <label>線の太さ <input type="number" min="0.5" step="0.5" bind:value={item.lineWidth} oninput={changed} placeholder="1.5" /></label>
+      <label>線グラデ(色→色2) <input type="checkbox" bind:checked={item.lineGradient} onchange={changed} /></label>
       <label>スタイル
         <select bind:value={item.graphStyle} onchange={changed}>
           <optgroup label="単一線">
@@ -141,6 +143,7 @@
             <option value="dual-bars">bars-trace(棒+線)</option>
             <option value="dual-dotted">dotted(点線)</option>
             <option value="dual-scanband">scanband(帯)</option>
+            <option value="dual-linedot">linedot(線+点)</option>
           </optgroup>
         </select>
       </label>

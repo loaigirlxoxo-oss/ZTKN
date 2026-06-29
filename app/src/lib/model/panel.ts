@@ -47,7 +47,7 @@ export interface PanelItem {
   graphStyle?:
     | "line" | "filled" | "dots" | "spike"
     | "dual-basic" | "dual-crossing" | "dual-mirrored" | "dual-filled-split"
-    | "dual-bars" | "dual-dotted" | "dual-scanband";
+    | "dual-bars" | "dual-dotted" | "dual-scanband" | "dual-linedot";
   sensorSrc2?: string;        // 2本グラフの第2センサー（上り等）
   color2?: string;            // 第2線の色
   bgColor?: string;           // 背景色（グラフ/バー/ゲージのトラック）
@@ -58,7 +58,9 @@ export interface PanelItem {
   gradColor?: string;         // グラデの色2（色1は style.color）
   cornerRadius?: number;      // Box の角丸半径（0=角張）
   borderWidth?: number;       // Box の枠線太さ
-  lineWidth?: number;         // Line の太さ
+  lineWidth?: number;         // Line の太さ。GraphLine の線の太さにも流用
+  lineGradient?: boolean;     // GraphLine 単一線を色→色2の横グラデで描く（POP風）
+  graphColors?: string[];     // GraphLine の多段グラデ色（素材名の全色。指定時はこれで横グラデ）
   // Image のトリミング（元画像に対する割合 0..1。各辺を内側へ削る量。未指定=0=トリムなし）
   cropLeft?: number;
   cropRight?: number;

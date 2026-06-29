@@ -280,28 +280,40 @@
           const c = (ctx as unknown as { _context: CanvasRenderingContext2D })._context;
           const pts = shp.getAttr("pts") as number[] | undefined;
           const up = shp.getAttr("pts2") as number[] | undefined;
-          const drawLine = (p?: number[], col = gcolor, wd = 1.5) => {
+          // 太さ（既定1.5、lineWidthで上書き）。単一線はlineGradient/graphColorsで横グラデ（POP風）。
+          const lineW = item.lineWidth && item.lineWidth > 0 ? item.lineWidth : 1.5;
+          const dotR = Math.max(1.4, lineW * 0.9);
+          const stops = item.graphColors;
+          const grad: CanvasGradient | null = (!isDual && (item.lineGradient || (stops && stops.length >= 2)))
+            ? (() => {
+                const g = c.createLinearGradient(0, 0, w, 0);
+                if (stops && stops.length >= 2) stops.forEach((col, i) => g.addColorStop(i / (stops.length - 1), col));
+                else { g.addColorStop(0, gcolor); g.addColorStop(1, gcolor2); }
+                return g;
+              })()
+            : null;
+          const drawLine = (p?: number[], col: string | CanvasGradient = gcolor, wd = lineW) => {
             if (!p || p.length < 4) return;
             c.beginPath(); c.moveTo(p[0], p[1]);
             for (let i = 2; i < p.length; i += 2) c.lineTo(p[i], p[i + 1]);
-            c.lineJoin = "round"; c.lineCap = "round"; c.strokeStyle = col; c.lineWidth = wd; c.stroke();
+            c.lineJoin = "round"; c.lineCap = "round"; c.strokeStyle = grad ?? col; c.lineWidth = wd; c.stroke();
           };
-          const drawDots = (p?: number[], col = gcolor) => {
+          const drawDots = (p?: number[], col: string | CanvasGradient = gcolor) => {
             if (!p) return; c.beginPath();
-            for (let i = 0; i < p.length; i += 2) { c.moveTo(p[i] + 1.4, p[i + 1]); c.arc(p[i], p[i + 1], 1.4, 0, Math.PI * 2); }
-            c.fillStyle = col; c.fill();
+            for (let i = 0; i < p.length; i += 2) { c.moveTo(p[i] + dotR, p[i + 1]); c.arc(p[i], p[i + 1], dotR, 0, Math.PI * 2); }
+            c.fillStyle = grad ?? col; c.fill();
           };
-          const drawSpike = (p?: number[], col = gcolor) => {
+          const drawSpike = (p?: number[], col: string | CanvasGradient = gcolor) => {
             if (!p) return; c.beginPath();
             for (let i = 0; i < p.length; i += 2) { c.moveTo(p[i], h); c.lineTo(p[i], p[i + 1]); }
-            c.strokeStyle = col; c.lineWidth = 1; c.stroke();
+            c.strokeStyle = grad ?? col; c.lineWidth = lineW; c.stroke();
           };
-          const drawFill = (p?: number[], col = gcolor, a = 0.25, baseY = h) => {
+          const drawFill = (p?: number[], col: string | CanvasGradient = gcolor, a = 0.25, baseY = h) => {
             if (!p || p.length < 4) return;
             c.beginPath(); c.moveTo(p[0], p[1]);
             for (let i = 2; i < p.length; i += 2) c.lineTo(p[i], p[i + 1]);
             c.lineTo(p[p.length - 2], baseY); c.lineTo(p[0], baseY); c.closePath();
-            c.globalAlpha = a; c.fillStyle = col; c.fill(); c.globalAlpha = 1;
+            c.globalAlpha = a; c.fillStyle = grad ?? col; c.fill(); c.globalAlpha = 1;
           };
           // 中心線(h/2)基準で上半分=下り／下半分=上りに圧縮（本来の上下対称グラフ）
           const halfTop = (p?: number[]) => p?.map((v, i) => (i % 2 === 1 ? v / 2 : v));
@@ -317,9 +329,10 @@
           // 2本系（下り=pts/gcolor、上り=up/gcolor2）
           switch (gstyle) {
             case "dual-mirrored": { const dt = halfTop(pts), ub = halfBot(up); drawLine(dt); drawLine(ub, gcolor2); break; }
-            case "dual-filled-split": { const dt = halfTop(pts), ub = halfBot(up); drawFill(dt, gcolor, 0.25, h / 2); drawFill(ub, gcolor2, 0.25, h / 2); drawLine(dt); drawLine(ub, gcolor2); break; }
-            case "dual-bars": drawSpike(pts); drawLine(up, gcolor2); break;
+            case "dual-filled-split": { drawFill(pts, gcolor, 0.18, h); drawFill(up, gcolor2, 0.18, h); drawLine(pts); drawLine(up, gcolor2); break; }
+            case "dual-bars": drawFill(pts, gcolor, 0.12, h); drawSpike(up, gcolor2); drawLine(up, gcolor2); break;
             case "dual-dotted": drawDots(pts); drawDots(up, gcolor2); break;
+            case "dual-linedot": drawLine(pts); drawDots(up, gcolor2); break;
             case "dual-scanband":
               if (pts && up && pts.length >= 4 && up.length >= 4) {
                 c.beginPath(); c.moveTo(pts[0], pts[1]);
