@@ -1,6 +1,6 @@
 import { createPanel, createItem, type Panel, type PanelItem } from "$lib/model/panel";
 import { sensors } from "$lib/sensors/live.svelte";
-import { pickSensor, pickNetwork } from "$lib/sensors/match";
+import { pickLhm, pickNetwork } from "$lib/sensors/match";
 import { formatForUnit } from "$lib/render/format";
 
 // 数値中心のシンプルなテンプレ。大きな読み取り値を並べ、下に細い1本グラフ。
@@ -8,7 +8,7 @@ export function buildMinimalTemplate(): Panel {
   const panel = createPanel(1920, 480);
   const items: PanelItem[] = [];
   const add = <T extends PanelItem>(it: T): T => { items.push(it); return it; };
-  const bind = (type: string, kw: string[]) => pickSensor(sensors.list, type, kw)?.id;
+  const pick = (name: string, type: string, hwHas?: string) => pickLhm(sensors.list, name, type, hwHas)?.id;
   const unitOf = (id?: string) => sensors.list.find((s) => s.id === id)?.unit;
 
   const cell = (x: number, y: number, title: string, sensor: string | undefined, sum?: string[]) => {
@@ -19,15 +19,15 @@ export function buildMinimalTemplate(): Panel {
     val.style.fontSize = 60; val.style.color = "#eee8d6"; val.rect.w = 360; val.rect.h = 70; add(val);
   };
 
-  const cpuTemp = bind("Temperature", ["CPU パッケージ", "CPU Package", "パッケージ"]);
-  const cpuLoad = bind("", ["総 CPU 使用率", "Total CPU Usage", "合計 CPU", "CPU 使用率"]);
-  const gpuTemp = bind("Temperature", ["GPU 温度", "GPU Temperature"]);
-  const gpuLoad = bind("", ["GPU コア使用率", "GPU Core Load", "GPU コア", "GPU Utilization"]);
-  const dram = bind("", ["物理メモリ使用率", "Physical Memory Load", "物理メモリ"]);
-  const vram = bind("", ["GPU メモリ使用", "GPU Memory Usage", "VRAM"]);
-  const cpuPower = bind("Power", ["CPU パッケージ", "CPU Package Power", "CPU PPT"]);
-  const gpuPower = bind("Power", ["GPU 電力", "GPU Power"]);
-  const netDown = pickNetwork(sensors.list, ["download", "ダウンロード", "受信", "dl"], ["イーサネット", "ethernet"])?.id;
+  const cpuTemp = pick("CPU Package", "Temperature");
+  const cpuLoad = pick("CPU Total", "Load");
+  const gpuTemp = pick("GPU Core", "Temperature", "NVIDIA");
+  const gpuLoad = pick("GPU Core", "Load", "NVIDIA");
+  const dram = pick("Memory", "Load", "Total Memory");
+  const vram = pick("GPU Memory", "Load", "NVIDIA");
+  const cpuPower = pick("CPU Package", "Power");
+  const gpuPower = pick("GPU Package", "Power", "NVIDIA");
+  const netDown = pickNetwork(sensors.list, ["Download Speed", "download", "ダウンロード"], ["イーサネット", "ethernet"])?.id;
 
   const xs = [80, 560, 1040, 1520];
   cell(xs[0], 60, "CPU TEMP", cpuTemp);

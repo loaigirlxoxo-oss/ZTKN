@@ -2,7 +2,7 @@
   import { onMount, untrack } from "svelte";
   import Konva from "konva";
   import { editor } from "$lib/editor/editorState.svelte";
-  import type { PanelItem } from "$lib/model/panel";
+  import type { PanelItem, Style } from "$lib/model/panel";
   import { itemDisplayText } from "$lib/render/draw";
   import { formatValue, splitFormat } from "$lib/render/format";
   import { formatDate } from "$lib/render/datetime";
@@ -55,6 +55,7 @@
   }
   let layer: Konva.Layer;
   let tr: Konva.Transformer;
+  let gifAnim: Konva.Animation | undefined; // GIFがある時だけレイヤーを毎フレーム再描画＝アニメ再生
   const groups = new Map<string, Konva.Group>();
   const outlines = new Map<string, Konva.Rect>(); // 複数選択時に各オブジェクトへ出す点線枠
   const updaters = new Map<string, (v: number) => void>(); // 値だけ更新する関数
@@ -74,10 +75,29 @@
 
   // 値+単位を描く共通処理。数値は右寄せで右端固定、単位は固定位置に置くので
   // 桁が増減しても単位（°C や %）がずれない。戻り値は値だけ更新する関数。
+  // 文字のフチ(stroke)と影(shadow)。fillAfterStrokeEnabledで塗りを上に乗せ、フチが内側を潰さない。
+  function textDecor(style: Style) {
+    // グロー(フチぼかし)優先：フチ色でオフセット0の影を焚く＝フチの形が外へボケて光る。
+    // グローOFFのときは、ぼかし or オフセット指定でドロップ影を出す（ぼかし0でもくっきり影）。
+    const hasGlow = (style.glowBlur ?? 0) > 0;
+    const hasDrop = !hasGlow && !!(style.shadowBlur || style.shadowOffsetX || style.shadowOffsetY);
+    return {
+      stroke: style.strokeWidth ? (style.strokeColor ?? "#000000") : undefined,
+      strokeWidth: style.strokeWidth ?? 0,
+      fillAfterStrokeEnabled: true,
+      shadowColor: hasGlow ? (style.strokeColor ?? style.color) : (hasDrop ? (style.shadowColor ?? "#000000") : undefined),
+      shadowBlur: hasGlow ? style.glowBlur : (style.shadowBlur ?? 0),
+      shadowOffsetX: hasGlow ? 0 : (style.shadowOffsetX ?? 0),
+      shadowOffsetY: hasGlow ? 0 : (style.shadowOffsetY ?? 0),
+      shadowOpacity: style.shadowOpacity ?? 1,
+    };
+  }
+
   function addValueUnit(g: Konva.Group, item: PanelItem, v: number, containerW: number, centered: boolean, y: number): (val: number) => void {
     const font = {
       fontFamily: item.style.fontFamily, fontSize: item.style.fontSize,
       fontStyle: item.style.fontWeight, fill: item.style.color,
+      ...textDecor(item.style),
     };
     // 値が欠落(NaN)＝センサー切断時は淡色で「データなし」を示す。Labelは固定文言なので対象外。
     const baseFill = item.style.color;
@@ -89,7 +109,7 @@
     // 中央寄せ（ゲージ中心など）は数値＋単位をまとめて中央配置＝常に真ん中に揃う。
     // 単位固定の予約幅ロジックは左/右寄せ時のみ（中央寄せだと空き桁分だけ右へズレるため）。
     if (!parts || (parts.prefix === "" && parts.suffix === "") || centered) {
-      const t = new Konva.Text({ ...font, text: itemDisplayText(item, v), x: 0, y, width: containerW, align: centered ? "center" : item.style.align });
+      const t = new Konva.Text({ ...font, text: itemDisplayText(item, v), x: 0, y, width: containerW, align: centered ? "center" : item.style.align, wrap: "none" });
       g.add(t);
       return (val) => { t.text(itemDisplayText(item, val)); t.fill(tintFor(val)); };
     }
@@ -106,7 +126,7 @@
     const blockStart = centered ? Math.max(0, (containerW - (prefixW + reserve + suffixW)) / 2) : 0;
     const prefixNode = parts.prefix ? new Konva.Text({ ...font, text: parts.prefix, x: blockStart, y }) : null;
     if (prefixNode) g.add(prefixNode);
-    const valueNode = new Konva.Text({ ...font, text: formatValue(parts.token, v), x: blockStart + prefixW, y, width: reserve, align: "right" });
+    const valueNode = new Konva.Text({ ...font, text: formatValue(parts.token, v), x: blockStart + prefixW, y, width: reserve, align: "right", wrap: "none" });
     g.add(valueNode);
     const suffixNode = parts.suffix ? new Konva.Text({ ...font, text: parts.suffix, x: blockStart + prefixW + reserve, y }) : null;
     if (suffixNode) g.add(suffixNode);
@@ -118,12 +138,20 @@
   }
 
   // ローカル画像を Konva.Image として配置（未ロードなら後追いで差し込む）。
-  function addImageNode(g: Konva.Group, path: string, w: number, h: number): Konva.Image {
+  function addImageNode(g: Konva.Group, path: string, w: number, h: number, item?: PanelItem): Konva.Image {
     const node = new Konva.Image({ width: w, height: h, image: getImage(path) });
     g.add(node);
-    if (!getImage(path)) {
-      loadImage(path).then((img) => { node.image(img); node.getLayer()?.batchDraw(); }).catch(() => {});
-    }
+    // トリミング：元画像の自然サイズに対する割合で crop 矩形を算出（読み込み後に確定）
+    const applyCrop = (img: HTMLImageElement) => {
+      const l = item?.cropLeft ?? 0, r = item?.cropRight ?? 0, t = item?.cropTop ?? 0, b = item?.cropBottom ?? 0;
+      if (l || r || t || b) {
+        const nw = img.naturalWidth || img.width, nh = img.naturalHeight || img.height;
+        node.crop({ x: nw * l, y: nh * t, width: Math.max(1, nw * (1 - l - r)), height: Math.max(1, nh * (1 - t - b)) });
+      }
+    };
+    const cur = getImage(path);
+    if (cur) applyCrop(cur);
+    else loadImage(path).then((img) => { node.image(img); applyCrop(img); node.getLayer()?.batchDraw(); }).catch(() => {});
     return node;
   }
 
@@ -167,9 +195,10 @@
       g.add(new Konva.Line({ points: [0, item.rect.h / 2, item.rect.w, item.rect.h / 2], stroke: item.style.color, strokeWidth: item.lineWidth ?? 2, lineCap: "round" }));
     } else if (item.kind === "DateTime") {
       const t = new Konva.Text({
-        text: "", x: 0, y: 0, width: item.rect.w, align: item.style.align,
+        text: "", x: 0, y: 0, width: item.rect.w, align: item.style.align, wrap: "none",
         fontFamily: item.style.fontFamily, fontSize: item.style.fontSize,
         fontStyle: item.style.fontWeight, fill: item.style.color,
+        ...textDecor(item.style),
       });
       g.add(t);
       const fmt = item.format ?? "HH:mm:ss";
@@ -208,7 +237,13 @@
       };
       apply(v); updaters.set(item.id, apply);
     } else if (item.kind === "Image") {
-      if (item.asset) addImageNode(g, item.asset, item.rect.w, item.rect.h);
+      if (item.asset) {
+        addImageNode(g, item.asset, item.rect.w, item.rect.h, item);
+      } else if (!present) {
+        // 未割当の画像はエディタで見えるようプレースホルダ（表示専用では何も出さない）
+        g.add(new Konva.Rect({ width: item.rect.w, height: item.rect.h, stroke: "#5a5a5a", strokeWidth: 1, dash: [5, 4], fill: "rgba(255,255,255,0.04)" }));
+        g.add(new Konva.Text({ text: "🖼 画像未選択", x: 0, y: item.rect.h / 2 - 8, width: item.rect.w, align: "center", fontSize: 12, fill: "#888" }));
+      }
     } else if (item.kind === "Gauge" && item.gauge?.mode === "StateFrames") {
       const [min, max] = item.range ?? [0, 100];
       updaters.set(item.id, addStateFrames(g, item.gauge.frames, item.rect.w, item.rect.h, min, max, v));
@@ -245,28 +280,40 @@
           const c = (ctx as unknown as { _context: CanvasRenderingContext2D })._context;
           const pts = shp.getAttr("pts") as number[] | undefined;
           const up = shp.getAttr("pts2") as number[] | undefined;
-          const drawLine = (p?: number[], col = gcolor, wd = 1.5) => {
+          // 太さ（既定1.5、lineWidthで上書き）。単一線はlineGradient/graphColorsで横グラデ（POP風）。
+          const lineW = item.lineWidth && item.lineWidth > 0 ? item.lineWidth : 1.5;
+          const dotR = Math.max(1.4, lineW * 0.9);
+          const stops = item.graphColors;
+          const grad: CanvasGradient | null = (!isDual && (item.lineGradient || (stops && stops.length >= 2)))
+            ? (() => {
+                const g = c.createLinearGradient(0, 0, w, 0);
+                if (stops && stops.length >= 2) stops.forEach((col, i) => g.addColorStop(i / (stops.length - 1), col));
+                else { g.addColorStop(0, gcolor); g.addColorStop(1, gcolor2); }
+                return g;
+              })()
+            : null;
+          const drawLine = (p?: number[], col: string | CanvasGradient = gcolor, wd = lineW) => {
             if (!p || p.length < 4) return;
             c.beginPath(); c.moveTo(p[0], p[1]);
             for (let i = 2; i < p.length; i += 2) c.lineTo(p[i], p[i + 1]);
-            c.lineJoin = "round"; c.lineCap = "round"; c.strokeStyle = col; c.lineWidth = wd; c.stroke();
+            c.lineJoin = "round"; c.lineCap = "round"; c.strokeStyle = grad ?? col; c.lineWidth = wd; c.stroke();
           };
-          const drawDots = (p?: number[], col = gcolor) => {
+          const drawDots = (p?: number[], col: string | CanvasGradient = gcolor) => {
             if (!p) return; c.beginPath();
-            for (let i = 0; i < p.length; i += 2) { c.moveTo(p[i] + 1.4, p[i + 1]); c.arc(p[i], p[i + 1], 1.4, 0, Math.PI * 2); }
-            c.fillStyle = col; c.fill();
+            for (let i = 0; i < p.length; i += 2) { c.moveTo(p[i] + dotR, p[i + 1]); c.arc(p[i], p[i + 1], dotR, 0, Math.PI * 2); }
+            c.fillStyle = grad ?? col; c.fill();
           };
-          const drawSpike = (p?: number[], col = gcolor) => {
+          const drawSpike = (p?: number[], col: string | CanvasGradient = gcolor) => {
             if (!p) return; c.beginPath();
             for (let i = 0; i < p.length; i += 2) { c.moveTo(p[i], h); c.lineTo(p[i], p[i + 1]); }
-            c.strokeStyle = col; c.lineWidth = 1; c.stroke();
+            c.strokeStyle = grad ?? col; c.lineWidth = lineW; c.stroke();
           };
-          const drawFill = (p?: number[], col = gcolor, a = 0.25, baseY = h) => {
+          const drawFill = (p?: number[], col: string | CanvasGradient = gcolor, a = 0.25, baseY = h) => {
             if (!p || p.length < 4) return;
             c.beginPath(); c.moveTo(p[0], p[1]);
             for (let i = 2; i < p.length; i += 2) c.lineTo(p[i], p[i + 1]);
             c.lineTo(p[p.length - 2], baseY); c.lineTo(p[0], baseY); c.closePath();
-            c.globalAlpha = a; c.fillStyle = col; c.fill(); c.globalAlpha = 1;
+            c.globalAlpha = a; c.fillStyle = grad ?? col; c.fill(); c.globalAlpha = 1;
           };
           // 中心線(h/2)基準で上半分=下り／下半分=上りに圧縮（本来の上下対称グラフ）
           const halfTop = (p?: number[]) => p?.map((v, i) => (i % 2 === 1 ? v / 2 : v));
@@ -282,9 +329,10 @@
           // 2本系（下り=pts/gcolor、上り=up/gcolor2）
           switch (gstyle) {
             case "dual-mirrored": { const dt = halfTop(pts), ub = halfBot(up); drawLine(dt); drawLine(ub, gcolor2); break; }
-            case "dual-filled-split": { const dt = halfTop(pts), ub = halfBot(up); drawFill(dt, gcolor, 0.25, h / 2); drawFill(ub, gcolor2, 0.25, h / 2); drawLine(dt); drawLine(ub, gcolor2); break; }
-            case "dual-bars": drawSpike(pts); drawLine(up, gcolor2); break;
+            case "dual-filled-split": { drawFill(pts, gcolor, 0.18, h); drawFill(up, gcolor2, 0.18, h); drawLine(pts); drawLine(up, gcolor2); break; }
+            case "dual-bars": drawFill(pts, gcolor, 0.12, h); drawSpike(up, gcolor2); drawLine(up, gcolor2); break;
             case "dual-dotted": drawDots(pts); drawDots(up, gcolor2); break;
+            case "dual-linedot": drawLine(pts); drawDots(up, gcolor2); break;
             case "dual-scanband":
               if (pts && up && pts.length >= 4 && up.length >= 4) {
                 c.beginPath(); c.moveTo(pts[0], pts[1]);
@@ -472,6 +520,10 @@
     }
     applyValues();
     layer.draw();
+    // GIF（アニメ）があれば毎フレーム再描画して動かす。無ければ止める。
+    const hasGif = editor.panel.items.some((i) => i.kind === "Image" && /\.gif$/i.test(i.asset ?? ""));
+    if (hasGif) (gifAnim ??= new Konva.Animation(() => {}, layer)).start();
+    else gifAnim?.stop();
   }
 
   onMount(() => {
@@ -481,31 +533,16 @@
     stage.scale({ x: z, y: z });
     layer = new Konva.Layer();
     stage.add(layer);
+    let detachWinUp: (() => void) | undefined;
     if (!present) {
       // 空き領域ドラッグ＝ラバーバンド選択。クリック（動かさず）＝選択解除。
       const st = stage; // クロージャ用に非null参照を固定
       let selRect: Konva.Rect | null = null;
       let startPos: { x: number; y: number } | null = null;
       const baseIds: string[] = []; // Shift追加選択の起点
-      st.on("mousedown", (e) => {
-        if (e.target !== st) return; // アイテム上は wireNode が処理
-        const p = st.getRelativePointerPosition(); if (!p) return;
-        startPos = p;
-        const shift = !!(e.evt as MouseEvent)?.shiftKey;
-        baseIds.length = 0;
-        if (shift) baseIds.push(...editor.selectedIds);
-        else editor.clearSelection();
-        selRect = new Konva.Rect({ x: p.x, y: p.y, width: 0, height: 0, fill: "rgba(0,210,196,0.12)", stroke: "#00d2c4", strokeWidth: 1 });
-        layer.add(selRect); selRect.moveToTop();
-      });
-      st.on("mousemove", () => {
-        if (!selRect || !startPos) return;
-        const p = st.getRelativePointerPosition(); if (!p) return;
-        selRect.setAttrs({ x: Math.min(startPos.x, p.x), y: Math.min(startPos.y, p.y), width: Math.abs(p.x - startPos.x), height: Math.abs(p.y - startPos.y) });
-        layer.batchDraw();
-      });
-      st.on("mouseup", () => {
-        if (!selRect || !startPos) { startPos = null; return; }
+      // 選択枠を片付ける。キャンバス内/外どちらで離しても必ず呼ぶ＝取り残し防止。
+      const finishRubber = () => {
+        if (!selRect) { startPos = null; return; }
         const box: Box = { x: selRect.x(), y: selRect.y(), w: selRect.width(), h: selRect.height() };
         selRect.destroy(); selRect = null;
         if (box.w > 3 || box.h > 3) {
@@ -514,14 +551,38 @@
         }
         startPos = null;
         layer.batchDraw();
+      };
+      st.on("mousedown", (e) => {
+        if (e.target !== st) return; // アイテム上は wireNode が処理
+        const p = st.getRelativePointerPosition(); if (!p) return;
+        startPos = p;
+        const shift = !!(e.evt as MouseEvent)?.shiftKey;
+        baseIds.length = 0;
+        if (shift) baseIds.push(...editor.selectedIds);
+        else editor.clearSelection();
+        selRect = new Konva.Rect({ x: p.x, y: p.y, width: 0, height: 0, fill: "rgba(0,210,196,0.12)", stroke: "#00d2c4", strokeWidth: 1, listening: false });
+        layer.add(selRect); selRect.moveToTop();
       });
+      st.on("mousemove", () => {
+        if (!selRect || !startPos) return;
+        const p = st.getRelativePointerPosition(); if (!p) return;
+        selRect.setAttrs({ x: Math.min(startPos.x, p.x), y: Math.min(startPos.y, p.y), width: Math.abs(p.x - startPos.x), height: Math.abs(p.y - startPos.y) });
+        layer.batchDraw();
+      });
+      st.on("mouseup", finishRubber);
+      // キャンバス外でマウスを離しても選択枠を取り残さない
+      const onWinUp = () => finishRubber();
+      window.addEventListener("mouseup", onWinUp);
+      detachWinUp = () => window.removeEventListener("mouseup", onWinUp);
     }
     rebuild();
+    let detachResize: (() => void) | undefined;
     if (present) {
       const onResize = () => { recomputeFit(); };
       window.addEventListener("resize", onResize);
-      return () => window.removeEventListener("resize", onResize);
+      detachResize = () => window.removeEventListener("resize", onResize);
     }
+    return () => { detachWinUp?.(); detachResize?.(); gifAnim?.stop(); };
   });
 
   // 構造変更（追加/削除/リサイズ/プロパティ）だけで作り直す。

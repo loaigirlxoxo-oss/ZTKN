@@ -10,3 +10,8 @@ export async function loadPanel(name: string): Promise<Panel> {
   const json = await invoke<string>("load_panel", { name });
   return deserializePanel(json); // 破損時は throw（呼び出し側で表示）
 }
+
+// 保存済みパネル名の一覧（PCStatusPanels内の *.json）
+export async function listPanels(): Promise<string[]> {
+  return invoke<string[]>("list_panels");
+}

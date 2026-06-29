@@ -2,6 +2,7 @@
   import { editor } from "$lib/editor/editorState.svelte";
   import { sensors, type LiveSensor } from "$lib/sensors/live.svelte";
   import { formatForUnit } from "$lib/render/format";
+  import { getImage, loadImage } from "$lib/render/images";
   import { fontStore, ensureFonts } from "$lib/fonts/installed.svelte";
 
   ensureFonts(); // インストール済みフォントを取得（多重防止済み）
@@ -46,6 +47,18 @@
     changed();
   }
 
+  // クロップ時に縦横比を保つ：幅は保持し、高さを切り出し領域のアスペクトへ合わせる（歪み防止）
+  function fitCropAspect(): void {
+    const it = item;
+    if (!it || it.kind !== "Image" || !it.asset) return;
+    const img = getImage(it.asset);
+    if (!img) { loadImage(it.asset).then(() => { fitCropAspect(); changed(); }).catch(() => {}); return; }
+    const nw = img.naturalWidth || img.width, nh = img.naturalHeight || img.height;
+    const cw = nw * (1 - (it.cropLeft ?? 0) - (it.cropRight ?? 0));
+    const ch = nh * (1 - (it.cropTop ?? 0) - (it.cropBottom ?? 0));
+    if (cw > 0 && ch > 0) it.rect.h = Math.max(8, Math.round(it.rect.w * (ch / cw)));
+  }
+
   function toggleBold(e: Event): void {
     if (!item) return;
     item.style.fontWeight = (e.target as HTMLInputElement).checked ? "bold" : "normal";
@@ -79,6 +92,16 @@
     <label>太字 <input type="checkbox" checked={item.style.fontWeight === "bold"} onchange={toggleBold} /></label>
     <label>色 <input type="color" bind:value={item.style.color} oninput={changed} /></label>
     <label>format <input bind:value={item.format} oninput={changed} /></label>
+    {#if item.kind === "Label" || item.kind === "SensorText" || item.kind === "DateTime"}
+      <label>フチ色 <input type="color" value={item.style.strokeColor ?? "#000000"} oninput={(e) => { item.style.strokeColor = e.currentTarget.value; changed(); }} /></label>
+      <label>フチ太さ <input type="number" min="0" step="0.5" value={item.style.strokeWidth ?? 0} oninput={(e) => { item.style.strokeWidth = +e.currentTarget.value; changed(); }} /></label>
+      <label>フチぼかし(グロー) <input type="number" min="0" value={item.style.glowBlur ?? 0} oninput={(e) => { item.style.glowBlur = +e.currentTarget.value; changed(); }} /></label>
+      <label>影色 <input type="color" value={item.style.shadowColor ?? "#000000"} oninput={(e) => { item.style.shadowColor = e.currentTarget.value; changed(); }} /></label>
+      <label>影ぼかし(広がり) <input type="number" min="0" value={item.style.shadowBlur ?? 0} oninput={(e) => { item.style.shadowBlur = +e.currentTarget.value; changed(); }} /></label>
+      <label>影の濃さ <input type="range" min="0" max="1" step="0.05" value={item.style.shadowOpacity ?? 1} oninput={(e) => { item.style.shadowOpacity = +e.currentTarget.value; changed(); }} /></label>
+      <label>影X <input type="number" value={item.style.shadowOffsetX ?? 0} oninput={(e) => { item.style.shadowOffsetX = +e.currentTarget.value; changed(); }} /></label>
+      <label>影Y <input type="number" value={item.style.shadowOffsetY ?? 0} oninput={(e) => { item.style.shadowOffsetY = +e.currentTarget.value; changed(); }} /></label>
+    {/if}
     {#if item.kind === "GraphLine"}
       <label>単位
         <select bind:value={item.unit} onchange={changed}>
@@ -102,6 +125,8 @@
       <label>値倍率 <input type="number" step="0.1" bind:value={item.valueScale} oninput={changed} placeholder="1" /></label>
       <label>自動スケール <input type="checkbox" checked={!item.range} onchange={toggleAuto} /></label>
       <label>スケール表示 <input type="checkbox" bind:checked={item.showScale} onchange={changed} /></label>
+      <label>線の太さ <input type="number" min="0.5" step="0.5" bind:value={item.lineWidth} oninput={changed} placeholder="1.5" /></label>
+      <label>線グラデ(色→色2) <input type="checkbox" bind:checked={item.lineGradient} onchange={changed} /></label>
       <label>スタイル
         <select bind:value={item.graphStyle} onchange={changed}>
           <optgroup label="単一線">
@@ -118,6 +143,7 @@
             <option value="dual-bars">bars-trace(棒+線)</option>
             <option value="dual-dotted">dotted(点線)</option>
             <option value="dual-scanband">scanband(帯)</option>
+            <option value="dual-linedot">linedot(線+点)</option>
           </optgroup>
         </select>
       </label>
@@ -147,6 +173,13 @@
     {/if}
     {#if item.kind === "Line"}
       <label>太さ <input type="number" min="1" bind:value={item.lineWidth} oninput={changed} /></label>
+    {/if}
+    {#if item.kind === "Image"}
+      <label>左トリム <input type="range" min="0" max="0.95" step="0.01" value={item.cropLeft ?? 0} oninput={(e) => { item.cropLeft = +e.currentTarget.value; fitCropAspect(); changed(); }} /></label>
+      <label>右トリム <input type="range" min="0" max="0.95" step="0.01" value={item.cropRight ?? 0} oninput={(e) => { item.cropRight = +e.currentTarget.value; fitCropAspect(); changed(); }} /></label>
+      <label>上トリム <input type="range" min="0" max="0.95" step="0.01" value={item.cropTop ?? 0} oninput={(e) => { item.cropTop = +e.currentTarget.value; fitCropAspect(); changed(); }} /></label>
+      <label>下トリム <input type="range" min="0" max="0.95" step="0.01" value={item.cropBottom ?? 0} oninput={(e) => { item.cropBottom = +e.currentTarget.value; fitCropAspect(); changed(); }} /></label>
+      <button onclick={() => { item.cropLeft = 0; item.cropRight = 0; item.cropTop = 0; item.cropBottom = 0; fitCropAspect(); changed(); }}>トリム解除</button>
     {/if}
     {#if item.kind === "BarH" || item.kind === "BarV"}
       <label>2色グラデ <input type="checkbox" bind:checked={item.useGradient} onchange={changed} /></label>
