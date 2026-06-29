@@ -13,6 +13,12 @@ export function pickNetwork(list: LiveSensor[], nameKw: string[], hwKw: string[]
   return rateLike.find(nameHit);
 }
 
+// LHM向け：名前完全一致＋型一致（必要ならハード名の部分一致）で1つ選ぶ。
+// LHMは "GPU Core" が Load/Clock/Temp で重複するので型で、"Memory" は hw で曖昧さを排除する。
+export function pickLhm(list: LiveSensor[], name: string, type: string, hwIncludes?: string): LiveSensor | undefined {
+  return list.find((s) => s.name === name && s.type === type && (!hwIncludes || s.hw.includes(hwIncludes)));
+}
+
 // 実センサー一覧からベストマッチを1つ選ぶ（サンプル自動割当用）。
 // type="" のときは種別を問わず名前キーワードのみで探す（HWiNFO/LHM の命名差を吸収）。
 export function pickSensor(list: LiveSensor[], type: string, nameIncludes: string[] = []): LiveSensor | undefined {

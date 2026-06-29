@@ -145,6 +145,7 @@
     </span>
     <span class="sep">|</span>
     <span class="sensor-status">🌡 {sensors.status}</span>
+    <button class="mini" title="センサーカタログを掃除（旧センサーを消して作り直す）" onclick={() => sensors.clearCatalog()}>🗑</button>
     <span class="msg">{msg}</span>
   </div>
 
@@ -172,6 +173,7 @@
   .align { display: flex; align-items: center; gap: 2px; }
   .align button { padding: 2px 7px; font-size: 13px; line-height: 1; }
   .sensor-status { color: #8ab; font-size: 12px; }
+  .mini { padding: 2px 6px; background: #2a2a2a; color: #ddd; border: 1px solid #3a3a3a; cursor: pointer; }
   .msg { color: #00ffcc; font-size: 12px; }
   .editor { display: flex; align-items: stretch; flex: 1 1 auto; min-height: 0; }
   .canvas-wrap { flex: 1; padding: 16px; overflow: auto; height: 100%; }
