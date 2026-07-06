@@ -37,6 +37,8 @@ export interface PanelItem {
   rect: Rect;
   z: number;
   rotation: number;   // 度（左上原点まわり）
+  flipX?: boolean;    // 左右反転（中心ミラー）
+  flipY?: boolean;    // 上下反転（中心ミラー）
   opacity: number;
   sensorSrc?: string;
   sensorSum?: string[];       // 指定時は複数センサーの合算値を使う（例: 全体電力=CPU+GPU）

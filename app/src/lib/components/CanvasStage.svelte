@@ -180,6 +180,7 @@
     const g = new Konva.Group({
       x: item.rect.x + cx, y: item.rect.y + cy, offsetX: cx, offsetY: cy,
       width: item.rect.w, height: item.rect.h,
+      scaleX: item.flipX ? -1 : 1, scaleY: item.flipY ? -1 : 1,
       rotation: item.rotation, opacity: item.opacity, id: item.id, draggable: !present,
     });
     // 透明なヒット領域：枠内どこでもクリックで選択できる（中空ゲージ/余白/小さい表示でも当たる）
@@ -441,7 +442,8 @@
       layer.batchDraw();
     });
     g.on("transformend", () => {
-      const sx = g.scaleX(), sy = g.scaleY();
+      // flip(負スケール)とリサイズ倍率が混ざるので絶対値で寸法を出す（flip状態は item.flipX/Y で保持）
+      const sx = Math.abs(g.scaleX()), sy = Math.abs(g.scaleY());
       const w = Math.max(8, Math.round(g.width() * sx));
       const h = Math.max(8, Math.round(g.height() * sy));
       // テキスト系は縦方向の拡縮にフォントサイズを追従させる（箱だけ伸びて文字が戻る問題の解消）
@@ -510,7 +512,7 @@
     }
     // Transformer は最前面（ハンドルがアイテムに隠れないように）。表示専用では作らない
     if (!present) {
-      tr = new Konva.Transformer({ rotateEnabled: true, rotationSnaps: [0, 90, 180, 270], ignoreStroke: true });
+      tr = new Konva.Transformer({ rotateEnabled: true, rotationSnaps: [0, 90, 180, 270], ignoreStroke: true, flipEnabled: false });
       layer.add(tr);
       // スマートアラインのガイド線（ドラッグ中のみ表示）
       guideV = new Konva.Line({ stroke: "#ff3b6b", strokeWidth: 1, visible: false, listening: false, points: [0, 0, 0, 0] });
