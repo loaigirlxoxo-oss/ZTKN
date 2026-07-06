@@ -5,9 +5,13 @@ class EditorState {
   panel = $state<Panel>(createPanel(960, 360));
   selectedIds = $state<string[]>([]); // 複数選択。selectedId は最後＝主選択
   values = $state<Map<string, number>>(new Map());
+  // ハード名を除いた name|type での索引。保存パネルが別PCの型番(例:RTX5080固定)でも、
+  // 完全一致しなければ name|type で拾えるようにする＝プリセットを機種非依存にする。
+  valuesByNameType = $state<Map<string, number>>(new Map());
   // 折れ線グラフ用の履歴リングバッファ（センサーIDごと）。描画は values 更新時に行うため非リアクティブで保持。
   readonly historyLen = 120;
   history = new Map<string, number[]>();
+  historyByNameType = new Map<string, number[]>();
   // 構造変更（追加/削除/プロパティ変更/リサイズ）を Konva 再描画へ伝える手動トリガ
   structureVersion = $state(0);
   // 表示倍率（キャンバスの見た目ズーム。パネル座標は不変）
@@ -65,15 +69,37 @@ class EditorState {
     this.bumpStructure();
   }
 
+  // 合成キー hw|name|type から、ハード名を除いた name|type を得る
+  private nameType(id: string): string {
+    const i = id.indexOf("|");
+    return i >= 0 ? id.substring(i + 1) : id;
+  }
+  private pushHist(map: Map<string, number[]>, key: string, v: number): void {
+    let arr = map.get(key);
+    if (!arr) { arr = []; map.set(key, arr); }
+    arr.push(v);
+    if (arr.length > this.historyLen) arr.shift();
+  }
+
+  // 値解決：完全一致 → name|type フォールバック（別機種のプリセットでも拾う）
+  valueOf(id: string): number | undefined {
+    const v = this.values.get(id);
+    return v !== undefined ? v : this.valuesByNameType.get(this.nameType(id));
+  }
+  historyOf(id: string): number[] {
+    return this.history.get(id) ?? this.historyByNameType.get(this.nameType(id)) ?? [];
+  }
+
   setValues(m: Map<string, number>): void {
     // 履歴へ追記（values を更新する前に行い、描画時に最新が読めるようにする）
+    const byNT = new Map<string, number>();
     for (const [k, v] of m) {
-      let arr = this.history.get(k);
-      if (!arr) { arr = []; this.history.set(k, arr); }
-      arr.push(v);
-      if (arr.length > this.historyLen) arr.shift();
+      this.pushHist(this.history, k, v);
+      byNT.set(this.nameType(k), v); // 同 name|type が複数あれば後勝ち（単機はまず衝突しない）
     }
+    for (const [nt, v] of byNT) this.pushHist(this.historyByNameType, nt, v); // 履歴は name|type ごと1回
     this.values = m;
+    this.valuesByNameType = byNT;
   }
 
   replacePanel(panel: Panel): void {
