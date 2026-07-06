@@ -81,13 +81,44 @@ class EditorState {
     if (arr.length > this.historyLen) arr.shift();
   }
 
-  // 値解決：完全一致 → name|type フォールバック（別機種のプリセットでも拾う）
+  // 主要CPU温度のベンダー差を吸収する別名グループ（優先＝代表性の高い順）。
+  // 例: プリセットがIntelの "CPU Package" でも、AMD機では "Core (Tctl/Tdie)" を拾う。
+  private static readonly CPU_TEMP_ALIASES = [
+    "CPU Package|Temperature",       // Intel メイン
+    "Core (Tctl/Tdie)|Temperature",  // AMD メイン
+    "Core (Tdie)|Temperature",       // AMD 旧表記
+    "CPU Cores|Temperature",
+    "Core Average|Temperature",
+    "SoC|Temperature",               // AMD I/Oダイ（最後の砦）
+  ];
+  private aliasGroup(nt: string): string[] {
+    return EditorState.CPU_TEMP_ALIASES.includes(nt) ? EditorState.CPU_TEMP_ALIASES : [];
+  }
+
+  // 値解決：完全一致 → name|type → 別名グループ（CPU温度のベンダー差）。
   valueOf(id: string): number | undefined {
     const v = this.values.get(id);
-    return v !== undefined ? v : this.valuesByNameType.get(this.nameType(id));
+    if (v !== undefined) return v;
+    const nt = this.nameType(id);
+    const direct = this.valuesByNameType.get(nt);
+    if (direct !== undefined) return direct; // 明示バインドを優先（別名で上書きしない）
+    for (const a of this.aliasGroup(nt)) {
+      const av = this.valuesByNameType.get(a);
+      if (av !== undefined) return av;
+    }
+    return undefined;
   }
   historyOf(id: string): number[] {
-    return this.history.get(id) ?? this.historyByNameType.get(this.nameType(id)) ?? [];
+    const h = this.history.get(id);
+    if (h) return h;
+    const nt = this.nameType(id);
+    const direct = this.historyByNameType.get(nt);
+    if (direct) return direct;
+    for (const a of this.aliasGroup(nt)) {
+      const ah = this.historyByNameType.get(a);
+      if (ah) return ah;
+    }
+    return [];
   }
 
   setValues(m: Map<string, number>): void {
