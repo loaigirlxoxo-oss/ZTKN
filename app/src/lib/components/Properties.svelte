@@ -1,6 +1,7 @@
 <script lang="ts">
   import { editor } from "$lib/editor/editorState.svelte";
   import { sensors, type LiveSensor } from "$lib/sensors/live.svelte";
+  import { pickLhm } from "$lib/sensors/match";
   import { formatForUnit } from "$lib/render/format";
   import { getImage, loadImage } from "$lib/render/images";
   import { fontStore, ensureFonts } from "$lib/fonts/installed.svelte";
@@ -38,11 +39,32 @@
     editor.bumpStructure();
   }
 
-  // センサーを選んだら、その単位から format を自動設定（SensorTextのみ）
-  function sensorChanged(): void {
-    if (item && item.kind === "SensorText") {
-      const s = sensors.list.find((x) => x.id === item.sensorSrc);
-      item.format = formatForUnit(s?.unit);
+  // 合算センサー「Total Power（CPU+GPU）」を表す特別な選択肢の値。実センサーIDと衝突しない。
+  const SUM_POWER = "__sum_power__";
+  // CPU電力＋GPU電力のセンサーIDを解決（テンプレ neon.ts と同じ基準）。
+  function totalPowerIds(): string[] {
+    const cpu = pickLhm(sensors.list, "CPU Package", "Power");
+    const gpu = pickLhm(sensors.list, "GPU Package", "Power", "NVIDIA") ?? pickLhm(sensors.list, "GPU Package", "Power");
+    return [cpu?.id, gpu?.id].filter(Boolean) as string[];
+  }
+  // ピッカーの選択値：合算中は SUM_POWER、それ以外は sensorSrc。
+  const sensorSelectValue = $derived(item?.sensorSum?.length ? SUM_POWER : (item?.sensorSrc ?? ""));
+
+  // センサーを選んだら反映。合算/単一/なし を排他で設定し、単位から format を自動設定（SensorTextのみ）。
+  function sensorChanged(e: Event): void {
+    if (!item) return;
+    const v = (e.currentTarget as HTMLSelectElement).value;
+    if (v === SUM_POWER) {
+      item.sensorSum = totalPowerIds();
+      item.sensorSrc = undefined;
+      if (item.kind === "SensorText") item.format = formatForUnit("W");
+    } else {
+      item.sensorSum = undefined;
+      item.sensorSrc = v === "" ? undefined : v;
+      if (item.kind === "SensorText") {
+        const s = sensors.list.find((x) => x.id === item.sensorSrc);
+        item.format = formatForUnit(s?.unit);
+      }
     }
     changed();
   }
@@ -191,8 +213,9 @@
     {/if}
     <label class="sensor-search">🔍 <input type="text" placeholder="センサー検索" bind:value={sensorQuery} /></label>
     <label>センサー
-      <select bind:value={item.sensorSrc} onchange={sensorChanged}>
-        <option value={undefined}>(なし)</option>
+      <select value={sensorSelectValue} onchange={sensorChanged}>
+        <option value="">(なし)</option>
+        <option value={SUM_POWER}>★ Total Power（CPU+GPU合算）</option>
         {#each filteredGroups as [hw, arr]}
           <optgroup label={hw}>
             {#each arr as s}<option value={s.id}>{s.name} ({s.unit})</option>{/each}
@@ -204,6 +227,10 @@
       <button onclick={() => editor.duplicateSelected()} title="複製 (Ctrl+D)">複製</button>
       <button onclick={() => editor.bringToFront()} title="最前面へ">前面</button>
       <button onclick={() => editor.sendToBack()} title="最背面へ">背面</button>
+    </div>
+    <div class="row">
+      <button class:on={item.flipX} onclick={() => { item.flipX = !item.flipX; changed(); }} title="左右反転（ミラー）">⇋ 左右反転</button>
+      <button class:on={item.flipY} onclick={() => { item.flipY = !item.flipY; changed(); }} title="上下反転（ミラー）">⇅ 上下反転</button>
     </div>
     <button class="del" onclick={() => editor.deleteSelected()}>削除 (Del)</button>
   </div>
@@ -221,5 +248,6 @@
   .sensor-search input { max-width: 150px; }
   .row { display: flex; gap: 4px; margin-top: 8px; }
   .row button { flex: 1; padding: 4px; background: #2a2a2a; color: #ddd; border: 1px solid #3a3a3a; cursor: pointer; }
+  .row button.on { background: #00d2c4; color: #042; border-color: #00d2c4; }
   .del { margin-top: 4px; padding: 4px; background: #5a2222; color: #fdd; border: 1px solid #7a3333; cursor: pointer; }
 </style>
