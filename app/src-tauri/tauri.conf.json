@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "ZTKN",
+  "productName": "ZTKN PawnIO",
   "version": "0.1.0",
-  "identifier": "com.valen.ztkn",
+  "identifier": "com.valen.ztkn.pawnio",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "ZTKN",
+        "title": "ZTKN PawnIO",
         "width": 800,
         "height": 600
       }
@@ -30,6 +30,7 @@
     "targets": ["nsis"],
     "resources": {
       "binaries/sensor-sidecar-x86_64-pc-windows-msvc.exe": "sensor-sidecar.exe",
+      "installer-deps/PawnIO_setup.exe": "PawnIO_setup.exe",
       "../Assets": "Assets",
       "../Panels": "Panels"
     },
@@ -39,6 +40,12 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "windows": {
+      "nsis": {
+        "installMode": "perMachine",
+        "installerHooks": "nsis-hooks.nsh"
+      }
+    }
   }
 }
