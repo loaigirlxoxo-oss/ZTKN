@@ -27,9 +27,11 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": ["nsis"],
     "resources": {
-      "binaries/sensor-sidecar-x86_64-pc-windows-msvc.exe": "sensor-sidecar.exe"
+      "binaries/sensor-sidecar-x86_64-pc-windows-msvc.exe": "sensor-sidecar.exe",
+      "../Assets": "Assets",
+      "../Panels": "Panels"
     },
     "icon": [
       "icons/32x32.png",
