@@ -13,6 +13,11 @@ tools/sensor-sidecar/obj/
 tools/sensor-sidecar/publish/
 app/src-tauri/binaries/*.exe
 
+# 同梱するサードパーティ署名ドライバのインストーラ（PawnIO版のみ。公式から取得して配置）
+# 取得元: https://github.com/namazso/PawnIO.Setup/releases → PawnIO_setup.exe を
+#   app/src-tauri/installer-deps/ に置く。サイレント導入: -install -silent
+app/src-tauri/installer-deps/*.exe
+
 # Logs & OS
 *.log
 .DS_Store
