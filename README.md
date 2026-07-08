@@ -116,5 +116,11 @@ npm run tauri build
 
 ## ライセンス / サードパーティ
 
-- センサー: [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor)（MPL 2.0）
-- ドライバ: [PawnIO](https://pawnio.eu/) / [PawnIO.Setup](https://github.com/namazso/PawnIO.Setup)（署名済み）
+利用・同梱するサードパーティ製ソフトの一覧とライセンスは [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) を参照。
+いずれも再配布が許諾されたライセンスです（要点）:
+
+- センサー: [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor)（**MPL-2.0**）
+- ドライバ: [PawnIO](https://github.com/namazso/PawnIO)（**GPL-2.0**。IOControl 経由の分離＝リンク例外あり／単なる集合体として同梱）
+- ランタイム: .NET 9（self-contained、再配布可）／ Tauri・Svelte・Konva 等は MIT / Apache-2.0
+
+`Assets/` `image/` の素材とアイコンは利用者コンテンツで、上記ライセンスの対象外です（各自の出所に従う）。
