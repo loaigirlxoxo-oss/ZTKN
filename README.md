@@ -86,8 +86,7 @@ Assets/
 
 ## ソースからビルド
 
-**かんたん**: 前提（下記）が揃っていれば、リポジトリ直下の **`build.bat`** をダブルクリックで全自動ビルド
-（サイドカーが無ければ生成 → 依存確認 → `tauri build`）。サイドカーを強制再ビルドしたい時は `build.bat sidecar`。
+**開発起動**: 前提（下記）が揃っていれば、リポジトリ直下の **`dev.bat`** をダブルクリック → UAC 承認で開発モード起動。
 
 **前提**: Node.js / Rust / .NET 9 SDK
 
@@ -103,7 +102,7 @@ npm install
 #    https://github.com/namazso/PawnIO.Setup/releases から PawnIO_setup.exe を取得し
 #    app/src-tauri/installer-deps/PawnIO_setup.exe に置く
 
-# 4. 開発起動（管理者必須。UAC を承認）
+# 4. 開発起動（管理者必須。UAC を承認）※ dev.bat ダブルクリックでも同じ
 ..\tools\dev-admin.ps1
 
 # 5. 配布ビルド（NSIS インストーラを生成）
