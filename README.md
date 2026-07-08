@@ -86,6 +86,9 @@ Assets/
 
 ## ソースからビルド
 
+**かんたん**: 前提（下記）が揃っていれば、リポジトリ直下の **`build.bat`** をダブルクリックで全自動ビルド
+（サイドカーが無ければ生成 → 依存確認 → `tauri build`）。サイドカーを強制再ビルドしたい時は `build.bat sidecar`。
+
 **前提**: Node.js / Rust / .NET 9 SDK
 
 ```powershell
