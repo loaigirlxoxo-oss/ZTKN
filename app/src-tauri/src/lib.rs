@@ -26,11 +26,14 @@ fn start_sensor_sidecar(app: AppHandle) {
         let path = sidecar_path(&app);
         let mut backoff = 1u64;
         loop {
-            match Command::new(&path)
-                .stdout(Stdio::piped())
-                .stderr(Stdio::null())
-                .spawn()
+            let mut cmd = Command::new(&path);
+            cmd.stdout(Stdio::piped()).stderr(Stdio::null());
+            #[cfg(windows)]
             {
+                use std::os::windows::process::CommandExt;
+                cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW: サイドカーの真っ黒なコンソール窓を出さない
+            }
+            match cmd.spawn() {
                 Ok(mut child) => {
                     backoff = 1;
                     let _ = app.emit("sensor-status", "connected");
