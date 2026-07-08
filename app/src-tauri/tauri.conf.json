@@ -27,6 +27,8 @@
   },
   "bundle": {
     "active": true,
+    "copyright": "© 2026 Lo-Ai Voice. All rights reserved.",
+    "publisher": "Lo-Ai Voice",
     "targets": ["nsis"],
     "resources": {
       "binaries/sensor-sidecar-x86_64-pc-windows-msvc.exe": "sensor-sidecar.exe",
