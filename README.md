@@ -116,6 +116,9 @@ npm run tauri build
 
 ## ライセンス / サードパーティ
 
+**ZTKN 本体**: © 2026 Lo-Ai Voice. **All rights reserved.**（[LICENSE](LICENSE) 参照）
+公式配布バイナリは個人利用可。ソース/アプリの複製・改変・再配布・再利用は無断では不可（オープンソースではありません）。
+
 利用・同梱するサードパーティ製ソフトの一覧とライセンスは [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) を参照。
 いずれも再配布が許諾されたライセンスです（要点）:
 

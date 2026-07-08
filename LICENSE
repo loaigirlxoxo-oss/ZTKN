@@ -1,0 +1,27 @@
+Copyright (c) 2026 Lo-Ai Voice. All rights reserved.
+
+ZTKN and its original source code in this repository are the property of
+Lo-Ai Voice. All rights are reserved.
+
+You may download and use the officially distributed binaries (GitHub Releases)
+for personal use. Except as expressly permitted, you may NOT copy, modify,
+redistribute, sublicense, sell, or reuse the source code or the application,
+in whole or in part, without prior written permission from Lo-Ai Voice.
+
+THIS SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY CLAIM, DAMAGES, OR
+OTHER LIABILITY ARISING FROM, OUT OF, OR IN CONNECTION WITH THE SOFTWARE OR
+THE USE OF THE SOFTWARE.
+
+---
+
+Third-party components bundled with or used by ZTKN are licensed under their
+own respective licenses and are NOT covered by the notice above. See
+THIRD-PARTY-NOTICES.md (e.g. LibreHardwareMonitorLib = MPL-2.0,
+PawnIO = GPL-2.0, .NET runtime, Tauri, etc.).
+
+「ZTKN」および本リポジトリ内の ZTKN 独自ソースコードの著作権は Lo-Ai Voice に帰属し、
+全ての権利を留保します。公式配布のバイナリ（GitHub Releases）は個人利用の範囲で使用できますが、
+明示的に許諾された場合を除き、ソースコードやアプリの複製・改変・再配布・再利用・販売は
+（全部/一部を問わず）Lo-Ai Voice の書面による事前許可なく行えません。
+同梱・利用する第三者製ソフトウェアは各々のライセンスに従います（THIRD-PARTY-NOTICES.md 参照）。
