@@ -13,6 +13,7 @@
     { kind: "Box", label: "⬛ ボックス" },
     { kind: "Line", label: "— 線" },
     { kind: "Image", label: "🖼 画像" },
+    { kind: "AlertList", label: "⚠ 承認待ち一覧" },
   ];
 </script>
 

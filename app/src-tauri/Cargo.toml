@@ -4,6 +4,13 @@ version = "0.1.0"
 description = "A Tauri App"
 authors = ["you"]
 edition = "2021"
+default-run = "app"
+
+# ztkn-hook を独立クレート化（tauri-build を通さない＝requireAdministrator を継承しないので、
+# 非昇格の Codex/Claude から起動されても UAC が出ない）。target を共有するため成果物は従来と同じ
+# target/debug/ztkn-hook.exe。
+[workspace]
+members = ["ztkn-hook"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -24,4 +31,9 @@ tauri-plugin-autostart = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 dirs = "5"
+# AI使用量取得用: 軽量ブロッキングHTTP + RFC3339パース。
+# TLSはOSネイティブのSChannel(native-tls)=Cビルド(ring)不要・OS証明書ストア利用でWindowsで確実に通る。
+ureq = { version = "2", default-features = false, features = ["native-tls"] }
+native-tls = "0.2" # ureqへ明示注入するSChannelコネクタ（native-tlsは手動配線が要る）
+chrono = { version = "0.4", default-features = false, features = ["std"] }
 
