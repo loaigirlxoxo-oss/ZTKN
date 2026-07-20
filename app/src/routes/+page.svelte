@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import Editor from "$lib/components/Editor.svelte";
   import Present from "$lib/components/Present.svelte";
+  import { agentAlerts } from "$lib/agents/alerts.svelte";
   import { view } from "$lib/editor/view.svelte";
   import { editor } from "$lib/editor/editorState.svelte";
   import { sensors } from "$lib/sensors/live.svelte";
@@ -34,6 +35,7 @@
       });
     }
     sensors.start();
+    agentAlerts.start(); // 承認待ち（件数センサー＋AlertList部品用の一覧）
   });
 </script>
 

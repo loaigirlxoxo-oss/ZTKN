@@ -1,4 +1,5 @@
 import { listen } from "@tauri-apps/api/event";
+import { invoke } from "@tauri-apps/api/core";
 import { editor } from "$lib/editor/editorState.svelte";
 
 export interface LiveSensor { id: string; name: string; hw: string; type: string; unit: string; }
@@ -54,6 +55,23 @@ class SensorHub {
     else this.onReady = cb;
   }
 
+  // 使用量イベント({source,sensors})を取り込む。値は usageValues へ、カタログはピッカー用に成長させる。
+  private ingestUsage(raw: string): void {
+    let payload: { sensors: RawSensor[] };
+    try { payload = JSON.parse(raw); } catch { return; }
+    const m = new Map<string, number>();
+    let grew = false;
+    for (const s of payload.sensors) {
+      m.set(s.id, s.value);
+      if (!this.catalog.has(s.id)) {
+        this.catalog.set(s.id, { id: s.id, name: s.name, hw: s.hw, type: s.type, unit: s.unit });
+        grew = true;
+      }
+    }
+    editor.setUsageValues(m);
+    if (grew) { this.list = this.sorted(); this.persist(); }
+  }
+
   async start(): Promise<void> {
     if (this.started) return;
     this.started = true;
@@ -88,6 +106,10 @@ class SensorHub {
       else if (e.payload === "disconnected") this.status = "切断（再接続中…）";
       else this.status = e.payload;
     });
+    // AI使用量(別イベント)。実センサーとは別スロットへ入れ、カタログに載せてピッカーに出す。
+    await listen<string>("usage", (e) => this.ingestUsage(e.payload));
+    // 起動直後は poller の初回emitを取り逃す可能性があるので、一度だけ即取得して種にする。
+    invoke<string>("get_claude_usage_event").then((j) => this.ingestUsage(j)).catch(() => { /* 未ログイン等は無視 */ });
   }
 }
 

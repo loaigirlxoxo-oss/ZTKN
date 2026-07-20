@@ -5,6 +5,8 @@ class EditorState {
   panel = $state<Panel>(createPanel(960, 360));
   selectedIds = $state<string[]>([]); // 複数選択。selectedId は最後＝主選択
   values = $state<Map<string, number>>(new Map());
+  // AI使用量(usageイベント)の値。実センサーとは別スロット＝1秒tickのsetValuesで潰されない。
+  usageValues = $state<Map<string, number>>(new Map());
   // ハード名を除いた name|type での索引。保存パネルが別PCの型番(例:RTX5080固定)でも、
   // 完全一致しなければ name|type で拾えるようにする＝プリセットを機種非依存にする。
   valuesByNameType = $state<Map<string, number>>(new Map());
@@ -99,6 +101,8 @@ class EditorState {
   valueOf(id: string): number | undefined {
     const v = this.values.get(id);
     if (v !== undefined) return v;
+    const uv = this.usageValues.get(id);
+    if (uv !== undefined) return uv; // AI使用量（別スロット・exact一致）
     const nt = this.nameType(id);
     const direct = this.valuesByNameType.get(nt);
     if (direct !== undefined) return direct; // 明示バインドを優先（別名で上書きしない）
@@ -131,6 +135,14 @@ class EditorState {
     for (const [nt, v] of byNT) this.pushHist(this.historyByNameType, nt, v); // 履歴は name|type ごと1回
     this.values = m;
     this.valuesByNameType = byNT;
+  }
+
+  // AI使用量の値を更新（usageイベント毎）。実センサー values とは独立。
+  // 差し替えでなくマージ：Claudeだけのseed/Codexだけの部分更新でも相手の値が消えないようにする。
+  setUsageValues(m: Map<string, number>): void {
+    const merged = new Map(this.usageValues);
+    for (const [k, v] of m) merged.set(k, v);
+    this.usageValues = merged;
   }
 
   replacePanel(panel: Panel): void {
@@ -235,16 +247,34 @@ class EditorState {
   }
 
   // --- 矢印キー微調整（選択全部を移動）---
+  // テキスト系の整列アンカーを現 rect から更新（矢印/整列/等間隔などの移動でも追従させる）
+  private reanchor(it: PanelItem): void {
+    if (it.kind !== "Label" && it.kind !== "SensorText" && it.kind !== "DateTime") return;
+    const a = it.style.align;
+    it.anchorX = a === "right" ? it.rect.x + it.rect.w : a === "center" ? it.rect.x + it.rect.w / 2 : it.rect.x;
+    it.anchorY = it.rect.y + it.rect.h / 2;
+  }
+
   nudge(dx: number, dy: number): void {
     const items = this.selectedItems;
     if (!items.length) return;
-    for (const it of items) { it.rect.x += dx; it.rect.y += dy; }
+    for (const it of items) { it.rect.x += dx; it.rect.y += dy; this.reanchor(it); }
     this.bumpStructure();
   }
 
   // --- 整列（選択2つ以上を、選択範囲のバウンディングボックス基準で揃える）---
   align(edge: "left" | "centerX" | "right" | "top" | "centerY" | "bottom"): void {
     const items = this.selectedItems;
+    // 単一の動的テキスト(SensorText/DateTime)は、箱内での文字整列(style.align)を横方向に設定する。
+    // ＝ツールバーの「そろえるボタン」を単一のセンサー表示にも効かせる（縦揃えは対象外）。
+    if (items.length === 1) {
+      const it = items[0];
+      if ((it.kind === "SensorText" || it.kind === "DateTime") && (edge === "left" || edge === "centerX" || edge === "right")) {
+        it.style.align = edge === "centerX" ? "center" : edge;
+        this.bumpStructure();
+      }
+      return;
+    }
     if (items.length < 2) return;
     const minX = Math.min(...items.map((i) => i.rect.x));
     const maxX = Math.max(...items.map((i) => i.rect.x + i.rect.w));
@@ -260,6 +290,7 @@ class EditorState {
         case "centerY": it.rect.y = Math.round(cy - it.rect.h / 2); break;
         case "bottom": it.rect.y = maxY - it.rect.h; break;
       }
+      this.reanchor(it);
     }
     this.bumpStructure();
   }
@@ -276,6 +307,7 @@ class EditorState {
       const target = first + step * idx;
       if (axis === "x") it.rect.x = Math.round(target - it.rect.w / 2);
       else it.rect.y = Math.round(target - it.rect.h / 2);
+      this.reanchor(it);
     });
     this.bumpStructure();
   }

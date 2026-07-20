@@ -63,7 +63,8 @@
       item.sensorSrc = v === "" ? undefined : v;
       if (item.kind === "SensorText") {
         const s = sensors.list.find((x) => x.id === item.sensorSrc);
-        item.format = formatForUnit(s?.unit);
+        // リセット時刻(epoch)は %t＝残り時間カウントダウンで表示。通常センサーは単位から数値書式。
+        item.format = s?.type === "Reset" ? "残り %t" : formatForUnit(s?.unit);
       }
     }
     changed();
@@ -115,6 +116,15 @@
     <label>色 <input type="color" bind:value={item.style.color} oninput={changed} /></label>
     <label>format <input bind:value={item.format} oninput={changed} /></label>
     {#if item.kind === "Label" || item.kind === "SensorText" || item.kind === "DateTime"}
+      {#if item.kind === "SensorText" || item.kind === "DateTime"}
+        <label>揃え(基準)
+          <select value={item.style.align} onchange={(e) => { item.style.align = e.currentTarget.value as "left" | "center" | "right"; changed(); }}>
+            <option value="left">左（左端固定）</option>
+            <option value="center">中央（中心固定）</option>
+            <option value="right">右（右端固定）</option>
+          </select>
+        </label>
+      {/if}
       <label>フチ色 <input type="color" value={item.style.strokeColor ?? "#000000"} oninput={(e) => { item.style.strokeColor = e.currentTarget.value; changed(); }} /></label>
       <label>フチ太さ <input type="number" min="0" step="0.5" value={item.style.strokeWidth ?? 0} oninput={(e) => { item.style.strokeWidth = +e.currentTarget.value; changed(); }} /></label>
       <label>フチぼかし(グロー) <input type="number" min="0" value={item.style.glowBlur ?? 0} oninput={(e) => { item.style.glowBlur = +e.currentTarget.value; changed(); }} /></label>
@@ -203,7 +213,7 @@
       <label>下トリム <input type="range" min="0" max="0.95" step="0.01" value={item.cropBottom ?? 0} oninput={(e) => { item.cropBottom = +e.currentTarget.value; fitCropAspect(); changed(); }} /></label>
       <button onclick={() => { item.cropLeft = 0; item.cropRight = 0; item.cropTop = 0; item.cropBottom = 0; fitCropAspect(); changed(); }}>トリム解除</button>
     {/if}
-    {#if item.kind === "BarH" || item.kind === "BarV"}
+    {#if item.kind === "BarH" || item.kind === "BarV" || item.kind === "Gauge"}
       <label>2色グラデ <input type="checkbox" bind:checked={item.useGradient} onchange={changed} /></label>
       <label>色2 <input type="color" bind:value={item.gradColor} oninput={changed} /></label>
     {/if}
@@ -211,18 +221,28 @@
       <label>min <input type="number" bind:value={item.range[0]} oninput={changed} /></label>
       <label>max <input type="number" bind:value={item.range[1]} oninput={changed} /></label>
     {/if}
-    <label class="sensor-search">🔍 <input type="text" placeholder="センサー検索" bind:value={sensorQuery} /></label>
-    <label>センサー
-      <select value={sensorSelectValue} onchange={sensorChanged}>
-        <option value="">(なし)</option>
-        <option value={SUM_POWER}>★ Total Power（CPU+GPU合算）</option>
-        {#each filteredGroups as [hw, arr]}
-          <optgroup label={hw}>
-            {#each arr as s}<option value={s.id}>{s.name} ({s.unit})</option>{/each}
-          </optgroup>
-        {/each}
-      </select>
-    </label>
+    {#if item.kind === "AlertList"}
+      <label>対象
+        <select value={item.sensorSrc ?? ""} onchange={(e) => { item.sensorSrc = e.currentTarget.value || undefined; changed(); }}>
+          <option value="">全部（Claude+Codex）</option>
+          <option value="claude">Claudeのみ</option>
+          <option value="codex">Codexのみ</option>
+        </select>
+      </label>
+    {:else}
+      <label class="sensor-search">🔍 <input type="text" placeholder="センサー検索" bind:value={sensorQuery} /></label>
+      <label>センサー
+        <select value={sensorSelectValue} onchange={sensorChanged}>
+          <option value="">(なし)</option>
+          <option value={SUM_POWER}>★ Total Power（CPU+GPU合算）</option>
+          {#each filteredGroups as [hw, arr]}
+            <optgroup label={hw}>
+              {#each arr as s}<option value={s.id}>{s.name} ({s.unit})</option>{/each}
+            </optgroup>
+          {/each}
+        </select>
+      </label>
+    {/if}
     <div class="row">
       <button onclick={() => editor.duplicateSelected()} title="複製 (Ctrl+D)">複製</button>
       <button onclick={() => editor.bringToFront()} title="最前面へ">前面</button>

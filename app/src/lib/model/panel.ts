@@ -1,4 +1,4 @@
-export type ItemKind = "Label" | "SensorText" | "Gauge" | "GraphLine" | "BarH" | "BarV" | "Image" | "DateTime" | "Box" | "Line";
+export type ItemKind = "Label" | "SensorText" | "Gauge" | "GraphLine" | "BarH" | "BarV" | "Image" | "DateTime" | "Box" | "Line" | "AlertList";
 
 export interface Rect { x: number; y: number; w: number; h: number; }
 
@@ -39,6 +39,10 @@ export interface PanelItem {
   rotation: number;   // 度（左上原点まわり）
   flipX?: boolean;    // 左右反転（中心ミラー）
   flipY?: boolean;    // 上下反転（中心ミラー）
+  // テキスト系の位置アンカー（整列の基準点）。箱を文字にフィットしても基準辺がここに固定される。
+  // 左揃え=左端 / 右揃え=右端 / 中央=中心 を anchorX に合わせる。anchorY は縦中心。
+  anchorX?: number;
+  anchorY?: number;
   opacity: number;
   sensorSrc?: string;
   sensorSum?: string[];       // 指定時は複数センサーの合算値を使う（例: 全体電力=CPU+GPU）
@@ -107,6 +111,8 @@ export function createItem(kind: ItemKind, pos: { x: number; y: number }): Panel
   if (kind === "Line") { base.rect.w = 220; base.rect.h = 12; base.style.color = "#888888"; base.lineWidth = 2; }
   if (kind === "BarH") { base.rect.w = 160; base.rect.h = 24; base.range = [0, 100]; base.bgColor = "#333333"; base.bgOpacity = 1; base.frameColor = "#555555"; base.frameOpacity = 1; base.useGradient = false; base.gradColor = "#ff3333"; }
   if (kind === "BarV") { base.rect.w = 24; base.rect.h = 120; base.range = [0, 100]; base.bgColor = "#333333"; base.bgOpacity = 1; base.frameColor = "#555555"; base.frameOpacity = 1; base.useGradient = false; base.gradColor = "#ff3333"; }
+  // 承認待ちのフォルダ一覧を表示する部品（可変テキスト。中身は agentAlerts ストアから）
+  if (kind === "AlertList") { base.rect.w = 300; base.rect.h = 120; base.style.fontSize = 16; base.style.color = "#ff6b6b"; }
   return base;
 }
 

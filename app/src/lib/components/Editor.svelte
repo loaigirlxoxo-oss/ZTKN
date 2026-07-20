@@ -19,6 +19,12 @@
   let panelName = $state("default");        // 保存/読込に使う名前
   let savedList = $state<string[]>([]);      // 保存済みパネル一覧
 
+  // 単一の動的テキスト(SensorText/DateTime)を選択中か＝横整列ボタンを単体選択でも有効化する
+  const singleDynText = $derived(
+    editor.selectedItems.length === 1 &&
+      (editor.selectedItems[0].kind === "SensorText" || editor.selectedItems[0].kind === "DateTime"),
+  );
+
   async function refreshSavedList(): Promise<void> {
     try { savedList = await listPanels(); } catch { /* 一覧取得失敗時は空のまま */ }
   }
@@ -42,6 +48,12 @@
 
   loadMonitors(); // 接続中ディスプレイ一覧を取得（表示モニタ選択用）
   loadAutostart(); // OS自動起動の現在状態を取得
+
+  // 起動時、パネルが空なら Default テンプレ(templates[0])を自動投入する。
+  // センサーが揃ってから組む（実機バインドのため）。保存パネル読込時は items>0 なので上書きしない。
+  sensors.whenReady(() => {
+    if (editor.panel.items.length === 0) editor.replacePanel(templates[0].build());
+  });
 
   // キーボードショートカット（フォーム入力中はネイティブに任せる）
   onMount(() => {
@@ -144,10 +156,10 @@
       <button onclick={fitZoom}>フィット</button>
     </div>
     <span class="sep">|</span>
-    <span class="align" title="整列（2つ以上選択）/ 等間隔（3つ以上）">
-      <button onclick={() => editor.align("left")} disabled={editor.selectedIds.length < 2} title="左揃え">⇤</button>
-      <button onclick={() => editor.align("centerX")} disabled={editor.selectedIds.length < 2} title="左右中央">⇔</button>
-      <button onclick={() => editor.align("right")} disabled={editor.selectedIds.length < 2} title="右揃え">⇥</button>
+    <span class="align" title="整列（2つ以上選択）/ 等間隔（3つ以上）。センサー値・時刻は1つでも左右中央で揃う">
+      <button onclick={() => editor.align("left")} disabled={editor.selectedIds.length < 2 && !singleDynText} title="左揃え">⇤</button>
+      <button onclick={() => editor.align("centerX")} disabled={editor.selectedIds.length < 2 && !singleDynText} title="左右中央">⇔</button>
+      <button onclick={() => editor.align("right")} disabled={editor.selectedIds.length < 2 && !singleDynText} title="右揃え">⇥</button>
       <button onclick={() => editor.align("top")} disabled={editor.selectedIds.length < 2} title="上揃え">⤒</button>
       <button onclick={() => editor.align("centerY")} disabled={editor.selectedIds.length < 2} title="上下中央">↕</button>
       <button onclick={() => editor.align("bottom")} disabled={editor.selectedIds.length < 2} title="下揃え">⤓</button>

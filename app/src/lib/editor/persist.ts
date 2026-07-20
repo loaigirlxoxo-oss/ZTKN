@@ -51,7 +51,9 @@ function remapAssets(panel: Panel, fn: (p: string) => string): Panel {
 
 export async function savePanel(name: string, panel: Panel): Promise<void> {
   const root = await assetsRoot();
-  const portable = remapAssets(structuredClone(panel), (p) => toStorage(p, root)); // ライブ状態は変えずクローンを保存
+  // ライブ状態は変えずクローンを保存する。Svelte5の$stateプロキシは structuredClone で
+  // DataCloneError になり得るため、JSON往復で確実にプレーン化してからクローンする。
+  const portable = remapAssets(JSON.parse(JSON.stringify(panel)) as Panel, (p) => toStorage(p, root));
   await invoke("save_panel", { name, json: serializePanel(portable) });
 }
 

@@ -2,9 +2,11 @@
   import { onMount, untrack } from "svelte";
   import Konva from "konva";
   import { editor } from "$lib/editor/editorState.svelte";
+  import { blockStartX } from "$lib/editor/textAlign";
+  import { agentAlerts } from "$lib/agents/alerts.svelte";
   import type { PanelItem, Style } from "$lib/model/panel";
   import { itemDisplayText } from "$lib/render/draw";
-  import { formatValue, splitFormat } from "$lib/render/format";
+  import { formatValue, splitFormat, isCountdownFormat, formatCountdown } from "$lib/render/format";
   import { formatDate } from "$lib/render/datetime";
   import { valueToFraction } from "$lib/render/gauge";
   import { historyToPoints, graphScale, autoRateUnit } from "$lib/render/graph";
@@ -60,6 +62,10 @@
   const outlines = new Map<string, Konva.Rect>(); // 複数選択時に各オブジェクトへ出す点線枠
   const updaters = new Map<string, (v: number) => void>(); // 値だけ更新する関数
 
+  // フォント名を引用符で囲む。数字始まり("851ゴチカクット"等)や特殊名は無引用だと
+  // ctx.font が無効になり描画されない。Konva はスペース有りしか引用しないため自前で囲む。
+  const qFont = (f: string) => `"${(f ?? "").replace(/"/g, '\\"')}"`;
+
   function valueFor(item: PanelItem): number {
     const scale = item.valueScale ?? 1;
     if (item.sensorSum && item.sensorSum.length) {
@@ -95,7 +101,7 @@
 
   function addValueUnit(g: Konva.Group, item: PanelItem, v: number, containerW: number, centered: boolean, y: number): (val: number) => void {
     const font = {
-      fontFamily: item.style.fontFamily, fontSize: item.style.fontSize,
+      fontFamily: qFont(item.style.fontFamily), fontSize: item.style.fontSize,
       fontStyle: item.style.fontWeight, fill: item.style.color,
       ...textDecor(item.style),
     };
@@ -122,8 +128,10 @@
     const reserve = measure(sample);
     const prefixW = parts.prefix ? measure(parts.prefix) : 0;
     const suffixW = parts.suffix ? measure(parts.suffix) : 0;
-    // ブロック全体の幅は live 値に依存しない（予約幅で固定）→ 中央寄せでも単位位置が動かない
-    const blockStart = centered ? Math.max(0, (containerW - (prefixW + reserve + suffixW)) / 2) : 0;
+    // ブロック全体の幅は live 値に依存しない（予約幅で固定）→ 桁が増減しても位置が動かない。
+    // 整列＝箱内のブロック配置基準：左=左端 / 右=右端 / 中央=中央（centered は上の分岐で処理済み）。
+    const blockW = prefixW + reserve + suffixW;
+    const blockStart = blockStartX(containerW, blockW, item.style.align);
     const prefixNode = parts.prefix ? new Konva.Text({ ...font, text: parts.prefix, x: blockStart, y }) : null;
     if (prefixNode) g.add(prefixNode);
     const valueNode = new Konva.Text({ ...font, text: formatValue(parts.token, v), x: blockStart + prefixW, y, width: reserve, align: "right", wrap: "none" });
@@ -173,7 +181,57 @@
     return apply;
   }
 
+  // 箱フィット用に測る「最大幅テキスト」。SensorText は予約桁（値が動いても幅が変わらない）で測る。
+  function fitSampleText(item: PanelItem): string {
+    if (item.kind === "DateTime") return formatDate(item.format ?? "HH:mm:ss", new Date());
+    if (item.kind === "Label") return itemDisplayText(item, NaN) || " ";
+    const parts = splitFormat(item.format ?? "%d");
+    if (!parts) return itemDisplayText(item, 888) || " ";
+    let intDigits = 3;
+    if (item.range) intDigits = Math.max(String(Math.round(item.range[0])).length, String(Math.round(item.range[1])).length);
+    const decMatch = parts.token.match(/\.(\d+)/); const dec = decMatch ? Number(decMatch[1]) : 0;
+    return (parts.prefix ?? "") + "8".repeat(Math.max(1, intDigits)) + (dec > 0 ? "." + "8".repeat(dec) : "") + (parts.suffix ?? "");
+  }
+
+  const isTextItem = (item: PanelItem) => item.kind === "Label" || item.kind === "SensorText" || item.kind === "DateTime";
+
+  // ドラッグ/リサイズ後、現在の rect の「整列の基準辺」をアンカーとして記録する。
+  function updateAnchor(item: PanelItem): void {
+    if (!isTextItem(item)) return;
+    const a = item.style.align;
+    item.anchorX = a === "right" ? item.rect.x + item.rect.w : a === "center" ? item.rect.x + item.rect.w / 2 : item.rect.x;
+    item.anchorY = item.rect.y + item.rect.h / 2;
+  }
+
+  // テキスト系の箱を文字にフィット（余白なし）しつつ、整列の基準辺を固定アンカーに合わせる。
+  // 左揃え=左端 / 中央=中心 / 右揃え=右端 を anchorX に置く。→ 整列を変えれば箱ごと動き、
+  // 値の桁数やフォントが変わっても基準辺は動かない（＝箱サイズに依存せず整列が効く）。
+  function fitTextRect(item: PanelItem): void {
+    const probe = new Konva.Text({ text: fitSampleText(item) || " ", fontFamily: qFont(item.style.fontFamily), fontSize: item.style.fontSize, fontStyle: item.style.fontWeight });
+    const newW = Math.max(4, Math.ceil(probe.width()));
+    const newH = Math.max(4, Math.ceil(probe.height()));
+    const a = item.style.align;
+    if (item.anchorX == null) item.anchorX = a === "right" ? item.rect.x + item.rect.w : a === "center" ? item.rect.x + item.rect.w / 2 : item.rect.x;
+    if (item.anchorY == null) item.anchorY = item.rect.y + item.rect.h / 2;
+    item.rect.w = newW;
+    item.rect.h = newH;
+    item.rect.x = Math.round(a === "right" ? item.anchorX - newW : a === "center" ? item.anchorX - newW / 2 : item.anchorX);
+    item.rect.y = Math.round(item.anchorY - newH / 2);
+  }
+
+  // 承認待ちの経過時間（過去→"n分"）。AlertList部品で使う。
+  function agoText(since: number): string {
+    const s = Math.max(0, Math.floor(Date.now() / 1000) - since);
+    if (s < 60) return `${s}秒`;
+    const m = Math.floor(s / 60);
+    if (m < 60) return `${m}分`;
+    return `${Math.floor(m / 60)}時間${m % 60}分`;
+  }
+
   function buildNode(item: PanelItem): Konva.Group {
+    // Labelのみ箱を文字にフィット（静的文字の余白を除く）。SensorText/DateTimeは箱を
+    // コンテナとして保ち、値を箱内で整列させる（桁が増減しても箱は動かない＝整列が効く）。
+    if (item.kind === "Label") fitTextRect(item);
     // offset を中心に置くことで、回転（ハンドル・数値とも）がオブジェクト中心を軸になる。
     // 子は従来どおり 0..w,0..h に描き、offset が左上を rect.x/y に合わせる。
     const cx = item.rect.w / 2, cy = item.rect.h / 2;
@@ -194,10 +252,27 @@
       g.add(new Konva.Rect({ width: item.rect.w, height: item.rect.h, cornerRadius: cr, stroke: item.frameColor ?? "#888888", strokeWidth: item.borderWidth ?? 1, opacity: item.frameOpacity ?? 1 }));
     } else if (item.kind === "Line") {
       g.add(new Konva.Line({ points: [0, item.rect.h / 2, item.rect.w, item.rect.h / 2], stroke: item.style.color, strokeWidth: item.lineWidth ?? 2, lineCap: "round" }));
+    } else if (item.kind === "AlertList") {
+      // 承認待ちフォルダ一覧（agentAlertsストアから）。0件なら空＝非表示。毎tickで更新。
+      const t = new Konva.Text({
+        text: "", x: 0, y: 0, width: item.rect.w, wrap: "word", lineHeight: 1.35,
+        fontFamily: qFont(item.style.fontFamily), fontSize: item.style.fontSize,
+        fontStyle: item.style.fontWeight, fill: item.style.color, align: item.style.align,
+        ...textDecor(item.style),
+      });
+      g.add(t);
+      // sensorSrc に "claude"/"codex" を入れるとそのプロバイダだけ表示（空なら全部）。承認待ちのみ列挙。
+      const prov = item.sensorSrc;
+      const upd = () => {
+        const rows = agentAlerts.list.filter((a) => a.status === "waiting" && (!prov || a.provider === prov));
+        t.text(rows.map((a) => `⚠ ${a.folder || a.session_id} (${agoText(a.since)})`).join("\n"));
+      };
+      upd();
+      updaters.set(item.id, upd);
     } else if (item.kind === "DateTime") {
       const t = new Konva.Text({
         text: "", x: 0, y: 0, width: item.rect.w, align: item.style.align, wrap: "none",
-        fontFamily: item.style.fontFamily, fontSize: item.style.fontSize,
+        fontFamily: qFont(item.style.fontFamily), fontSize: item.style.fontSize,
         fontStyle: item.style.fontWeight, fill: item.style.color,
         ...textDecor(item.style),
       });
@@ -207,7 +282,20 @@
       upd();
       updaters.set(item.id, upd); // 1秒ごとの値tickで更新
     } else if (item.kind === "Label" || item.kind === "SensorText") {
-      updaters.set(item.id, addValueUnit(g, item, v, item.rect.w, item.style.align === "center", 0));
+      if (item.kind === "SensorText" && isCountdownFormat(item.format)) {
+        // format に %t を含む＝リセットまでの残り時間表示。値(エポックms)を毎tickで now と差分する。
+        const t = new Konva.Text({
+          text: "", x: 0, y: 0, width: item.rect.w, align: item.style.align, wrap: "none",
+          fontFamily: qFont(item.style.fontFamily), fontSize: item.style.fontSize,
+          fontStyle: item.style.fontWeight, fill: item.style.color, ...textDecor(item.style),
+        });
+        g.add(t);
+        const upd = (val: number) => t.text(formatCountdown(item.format ?? "", val));
+        upd(v);
+        updaters.set(item.id, upd);
+      } else {
+        updaters.set(item.id, addValueUnit(g, item, v, item.rect.w, item.style.align === "center", 0));
+      }
     } else if (item.kind === "BarH" || item.kind === "BarV") {
       const [min, max] = item.range ?? [0, 100];
       const w = item.rect.w, h = item.rect.h;
@@ -253,7 +341,16 @@
       const r = Math.min(item.rect.w, item.rect.h) / 2;
       // 背景トラック（塗り）と枠（輪郭）を別ノードにして透過度を独立させる
       g.add(new Konva.Arc({ x: r, y: r, innerRadius: r * 0.7, outerRadius: r, angle: 270, rotation: 135, fill: item.bgColor ?? "#222222", opacity: item.bgOpacity ?? 1 }));
-      const fillArc = new Konva.Arc({ x: r, y: r, innerRadius: r * 0.7, outerRadius: r, angle: 0, rotation: 135, fill: item.style.color });
+      // useGradient時は左→右の2色線形グラデ（色1=style.color, 色2=gradColor）。既定は単色。
+      // アークの原点は中心(r,r)なのでローカル -r(左)→ r(右) で横方向にかける。
+      const arcFill = item.useGradient
+        ? {
+            fillLinearGradientStartPoint: { x: -r, y: 0 },
+            fillLinearGradientEndPoint: { x: r, y: 0 },
+            fillLinearGradientColorStops: [0, item.style.color, 1, item.gradColor ?? item.style.color],
+          }
+        : { fill: item.style.color };
+      const fillArc = new Konva.Arc({ x: r, y: r, innerRadius: r * 0.7, outerRadius: r, angle: 0, rotation: 135, ...arcFill });
       g.add(fillArc);
       g.add(new Konva.Arc({ x: r, y: r, innerRadius: r * 0.7, outerRadius: r, angle: 270, rotation: 135, stroke: item.frameColor ?? "#333333", strokeWidth: 1, opacity: item.frameOpacity ?? 1 }));
       // 中央は数値を出さず透過（リング内側は innerRadius=0.7r で空＝透過のまま）
@@ -347,7 +444,7 @@
         },
       });
       g.add(graph);
-      const scaleFont = { fontFamily: item.style.fontFamily, fontSize: 11, fill: "#9aa" };
+      const scaleFont = { fontFamily: qFont(item.style.fontFamily), fontSize: 11, fill: "#9aa" };
       const topLabel = showScale ? new Konva.Text({ ...scaleFont, x: 3, y: 2, text: "" }) : null;
       const midLabel = showScale ? new Konva.Text({ ...scaleFont, x: 3, y: h / 2 - 13, text: "" }) : null;
       const botLabel = showScale ? new Konva.Text({ ...scaleFont, x: 3, y: h - 14, text: "" }) : null;
@@ -434,6 +531,7 @@
         if (!ng || !it) continue;
         it.rect.x = Math.round(ng.x() - it.rect.w / 2);
         it.rect.y = Math.round(ng.y() - it.rect.h / 2);
+        updateAnchor(it); // ドラッグ後の位置を整列アンカーに反映
         ng.position({ x: it.rect.x + it.rect.w / 2, y: it.rect.y + it.rect.h / 2 });
       }
       dragStart = null; guideTargets = null;
@@ -455,6 +553,7 @@
       item.rect.h = h;
       item.rect.x = Math.round(cxAbs - w / 2);
       item.rect.y = Math.round(cyAbs - h / 2);
+      updateAnchor(item); // リサイズ後の位置を整列アンカーに反映
       item.rotation = Math.round(g.rotation());
       g.scale({ x: 1, y: 1 });
       editor.bumpStructure(); // 新サイズ・角度・フォントで作り直す
@@ -495,6 +594,22 @@
     layer.batchDraw();
   }
 
+  // canvas は @font-face フォントを自動ロードしないため、テキストで使うフォントを
+  // document.fonts.load で明示ロードし、揃ったら再描画する（未ロードだとフォールバック＝別字/小さく出る）。
+  let fontLoadSeq = 0;
+  function ensureTextFontsLoaded(): void {
+    if (typeof document === "undefined" || !document.fonts) return;
+    const fams = new Set<string>();
+    for (const it of editor.panel.items) { const f = it.style?.fontFamily; if (f) fams.add(f); }
+    const spec = (f: string) => `16px "${f.replace(/"/g, '\\"')}"`;
+    let pending: string[] = [];
+    try { pending = [...fams].filter((f) => !document.fonts.check(spec(f))); } catch { pending = [...fams]; }
+    if (!pending.length) return;
+    const seq = ++fontLoadSeq;
+    Promise.all(pending.map((f) => document.fonts.load(spec(f)).catch(() => {})))
+      .then(() => { if (seq === fontLoadSeq) layer.batchDraw(); });
+  }
+
   function rebuild(): void {
     groups.clear(); updaters.clear();
     layer.destroyChildren();
@@ -522,6 +637,7 @@
     }
     applyValues();
     layer.draw();
+    ensureTextFontsLoaded(); // @font-face フォントをロード→揃ったら再描画
     // GIF（アニメ）があれば毎フレーム再描画して動かす。無ければ止める。
     const hasGif = editor.panel.items.some((i) => i.kind === "Image" && /\.gif$/i.test(i.asset ?? ""));
     if (hasGif) (gifAnim ??= new Konva.Animation(() => {}, layer)).start();

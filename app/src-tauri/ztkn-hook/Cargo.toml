@@ -1,0 +1,16 @@
+# ztkn-hook: Claude Code / Codex フック用の超軽量ヘルパー。
+# アプリ本体(app)とは別クレート。tauri-build を通さない＝requireAdministrator マニフェストが付かないので、
+# 非昇格の Codex/Claude から起動されても UAC が出ない。GUIサブシステムなので黒窓も出ない。
+# ワークスペースのメンバーとして app と target を共有するため、成果物は ../target/debug/ztkn-hook.exe。
+[package]
+name = "ztkn-hook"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "ztkn-hook"
+path = "src/main.rs"
+
+[dependencies]
+serde_json = "1"
+dirs = "5"

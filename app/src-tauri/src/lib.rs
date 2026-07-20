@@ -3,6 +3,8 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use tauri::{AppHandle, Emitter, Manager};
 
+mod usage; // AI使用量(プラン残量%・5h/7d枠)の取得
+
 // センサーサイドカー(.NET)の実行ファイルパスを解決する。
 // 配布版はバンドルされたリソース(resource_dir/sensor-sidecar.exe)、
 // dev では src-tauri/binaries（CARGO_MANIFEST_DIR 基準）にフォールバック。
@@ -254,6 +256,8 @@ fn list_asset_sets() -> Result<Vec<AssetSet>, String> {
 // Windows にインストール済みのフォントファミリ名を全列挙する。
 // GDI+ の InstalledFontCollection を PowerShell 経由で読む（依存クレート追加なし）。
 // 日本語フォント名が化けないよう出力エンコーディングを UTF-8 に固定する。
+// 注意: 管理者昇格で動くため「ユーザー個別インストール」のフォントは列挙されない
+// （全ユーザー向けにインストールされたフォントのみ）。
 #[tauri::command]
 fn list_fonts() -> Vec<String> {
     let script = "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; \
@@ -279,6 +283,124 @@ fn list_fonts() -> Vec<String> {
         }
         Err(_) => vec![],
     }
+}
+
+// Claude のプラン使用量を sensor 互換JSONで即時取得する（起動直後の種＝pollerの初回emit取り逃し対策）。
+#[tauri::command]
+fn get_claude_usage_event() -> Result<String, String> {
+    usage::fetch_claude_usage().map(|u| usage::claude_usage_event_json(&u))
+}
+
+// Claude+Codex 使用量を定期取得して "usage" イベントで流すバックグラウンドポーラー。
+// 実センサー("sensors")とは別イベント＝値マップを潰さない。Claude+Codexは常に一括で出す
+// （usageValuesは差し替え方式なので片方だけ出すともう片方が消えるため）。失敗はログのみ。
+fn start_usage_poller(app: AppHandle) {
+    std::thread::spawn(move || {
+        // 直近値をキャッシュ＝一時的な取得失敗でも前回値を出し続ける（表示が消えない）。
+        let mut claude_cache: Option<usage::ClaudeUsage> = None;
+        let mut codex_cache: Option<usage::CodexUsage> = None;
+        let mut tick = 0u64;
+        loop {
+            match usage::fetch_claude_usage() {
+                Ok(u) => claude_cache = Some(u),
+                Err(e) => eprintln!("[usage] claude: {e}"), // 未ログイン/オフライン等（キャッシュ維持）
+            }
+            // Codexは app-server 起動が重いので5分に1回だけ更新（それ以外はキャッシュ値を使う）
+            if tick % 5 == 0 {
+                match usage::fetch_codex_usage() {
+                    Ok(c) => codex_cache = Some(c),
+                    Err(e) => eprintln!("[usage] codex: {e}"),
+                }
+            }
+            let _ = app.emit("usage", usage::usage_event_json(claude_cache.as_ref(), codex_cache.as_ref()));
+            tick += 1;
+            std::thread::sleep(std::time::Duration::from_secs(60));
+        }
+    });
+}
+
+// ~/.claude/ztkn-state/*.json を読み、承認待ちセッション一覧をJSON配列文字列で返す。
+// ファイル存在＝承認待ち（フックexeが作成/削除）。ts が古い（クラッシュ放置）は無視する。
+fn read_agent_alerts_list() -> Vec<serde_json::Value> {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let mut list: Vec<serde_json::Value> = vec![];
+    if let Some(dir) = dirs::home_dir().map(|h| h.join(".claude").join("ztkn-state")) {
+        if let Ok(rd) = std::fs::read_dir(&dir) {
+            for e in rd.flatten() {
+                let p = e.path();
+                if p.extension().and_then(|s| s.to_str()) != Some("json") {
+                    continue;
+                }
+                let Ok(txt) = std::fs::read_to_string(&p) else { continue };
+                let Ok(v) = serde_json::from_str::<serde_json::Value>(&txt) else { continue };
+                let ts = v["ts"].as_u64().unwrap_or(0);
+                if now.saturating_sub(ts) > 900 {
+                    continue; // 15分以上前＝放置とみなし無視
+                }
+                let cwd = v["cwd"].as_str().unwrap_or("").to_string();
+                let folder = std::path::Path::new(&cwd)
+                    .file_name()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("")
+                    .to_string();
+                list.push(serde_json::json!({
+                    "session_id": v["session_id"].as_str().unwrap_or(""),
+                    "folder": folder,
+                    "cwd": cwd,
+                    "since": ts,
+                    "provider": v["provider"].as_str().unwrap_or("claude"),
+                    "status": v["status"].as_str().unwrap_or("waiting"),
+                }));
+            }
+        }
+    }
+    list.sort_by(|a, b| a["folder"].as_str().unwrap_or("").cmp(b["folder"].as_str().unwrap_or("")));
+    list
+}
+
+// 承認待ち/実行中の件数を usage センサー形式で流す＝普通の部品で置ける。
+// グループ(hw)は Claude / Codex に分け、それぞれ「実行中」「承認待ち」の2値を出す。
+fn agent_count_usage_json(list: &[serde_json::Value]) -> String {
+    let n = |p: &str, s: &str| {
+        list.iter()
+            .filter(|a| a["provider"].as_str().unwrap_or("claude") == p && a["status"].as_str().unwrap_or("waiting") == s)
+            .count()
+    };
+    let entry = |id: &str, hw: &str, name: &str, value: usize| {
+        serde_json::json!({ "id": id, "name": name, "hw": hw, "type": "Alert", "unit": "件", "value": value })
+    };
+    serde_json::json!({
+        "source": "alert",
+        "sensors": [
+            entry("Claude|実行中|Alert", "Claude", "実行中", n("claude", "running")),
+            entry("Claude|承認待ち|Alert", "Claude", "承認待ち", n("claude", "waiting")),
+            entry("Codex|実行中|Alert", "Codex", "実行中", n("codex", "running")),
+            entry("Codex|承認待ち|Alert", "Codex", "承認待ち", n("codex", "waiting"))
+        ]
+    })
+    .to_string()
+}
+
+// 起動直後の種（poller初回emit取り逃し対策）。フォルダ一覧JSONを返す。
+#[tauri::command]
+fn get_agent_alerts() -> String {
+    serde_json::to_string(&read_agent_alerts_list()).unwrap_or_else(|_| "[]".into())
+}
+
+// 承認待ちを定期配信するポーラー（~2秒）。件数(usageセンサー) と 待ちフォルダ一覧 の両方を流す。
+fn start_agent_alert_poller(app: AppHandle) {
+    std::thread::spawn(move || loop {
+        let list = read_agent_alerts_list();
+        let _ = app.emit("usage", agent_count_usage_json(&list)); // A: 件数センサー（Claude/Codex別）
+        let _ = app.emit(
+            "agent-alerts",
+            serde_json::to_string(&list).unwrap_or_else(|_| "[]".into()),
+        ); // B: フォルダ一覧（AlertList部品用）
+        std::thread::sleep(std::time::Duration::from_secs(2));
+    });
 }
 
 // タスクトレイを構築する。左クリック/「表示」でウィンドウを再表示、「終了」でプロセス終了。
@@ -332,6 +454,8 @@ pub fn run() {
             let _ = std::fs::create_dir_all(assets_dir()); // 起動時にAssetsを必ず用意
             let _ = std::fs::create_dir_all(images_dir()); // 1枚絵置き場 image/ も用意
             start_sensor_sidecar(app.handle().clone());
+            start_usage_poller(app.handle().clone()); // AI使用量を定期取得して "usage" で配信
+            start_agent_alert_poller(app.handle().clone()); // 承認待ちを "agent-alerts" で配信
             setup_tray(app.handle())?; // タスクトレイ常駐
             // 自動起動(--minimized)時はウィンドウを出さずトレイ常駐で開始
             if std::env::args().any(|a| a == "--minimized") {
@@ -351,7 +475,8 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             save_panel, load_panel, list_panels, read_text_file, list_dir_images,
-            assets_root, open_assets_dir, list_asset_sets, list_fonts, list_images, open_images_dir
+            assets_root, open_assets_dir, list_asset_sets, list_fonts, list_images, open_images_dir,
+            get_claude_usage_event, get_agent_alerts
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -360,6 +485,7 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
     #[test]
     fn save_then_load_roundtrips() {
         let name = "test_panel_roundtrip";
