@@ -26,10 +26,12 @@ Thumbs.db
 # stray capture
 tools/sensor-sidecar/out.txt
 
-# 取り込んだアセット（ユーザーコンテンツ・生成物）
-app/Assets/
+# app/Assets と app/Panels はインストーラに同梱されるため Git 管理下に置く。
+# （管理外だと、配布物に何が入るかが GitHub のソースから確認できず、
+#   clone してもビルドできない。実際 v0.3.0 には開発機の絶対パスが混入した）
+# 個人的な作業用の1枚絵は配布対象外なので除外を続ける。
 app/image/
-app/Panels/
 
-# 素材パック（ユーザーコンテンツ・大容量）
-aida64-skin-*/
+# 素材パックの生ダウンロードをリポジトリ直下に置いた場合の保険。
+# app/Assets/ 配下の同名パックは配布物なので追跡する（先頭の / で直下限定にしている）。
+/aida64-skin-*/

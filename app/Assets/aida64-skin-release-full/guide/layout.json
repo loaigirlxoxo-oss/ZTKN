@@ -1,0 +1,98 @@
+{
+  "panel": {
+    "width": 1920,
+    "height": 480
+  },
+  "recommended_dynamic_background": "backgrounds/base-for-dynamic/ref-v14-generated-black-poster-bg.png",
+  "preview_background": "backgrounds/final-selected-preview/final-aida64-sensorpanel-1920x480.png",
+  "important": "The preview background has gauge/text artwork baked in. For live AIDA64 gauges, use the base-for-dynamic background plus Custom Gauge state images.",
+  "items": [
+    {
+      "name": "CPU Round Gauge",
+      "type": "AIDA64 Custom Gauge",
+      "sensor": "CPU Package temperature",
+      "x": 198,
+      "y": 326,
+      "width": 118,
+      "height": 118,
+      "states": "custom-gauge-states/round/gradient-cpu-pink-yellow-lime"
+    },
+    {
+      "name": "GPU Round Gauge",
+      "type": "AIDA64 Custom Gauge",
+      "sensor": "GPU temperature",
+      "x": 1602,
+      "y": 306,
+      "width": 118,
+      "height": 118,
+      "states": "custom-gauge-states/round/gradient-gpu-cyan-purple-pink"
+    },
+    {
+      "name": "RAM Bar",
+      "type": "AIDA64 Custom Gauge",
+      "sensor": "Memory utilization",
+      "x": 610,
+      "y": 382,
+      "width": 320,
+      "height": 48,
+      "states": "custom-gauge-states/horizontal/ticket-strip/yellow"
+    },
+    {
+      "name": "VRAM Bar",
+      "type": "AIDA64 Custom Gauge",
+      "sensor": "GPU memory utilization",
+      "x": 1280,
+      "y": 380,
+      "width": 330,
+      "height": 54,
+      "states": "custom-gauge-states/horizontal/slash-cut/lime"
+    },
+    {
+      "name": "Network History",
+      "type": "AIDA64 native Graph",
+      "sensor": "NIC download/upload rate",
+      "x": 872,
+      "y": 306,
+      "width": 500,
+      "height": 112,
+      "states": "network graph PNGs are references/overlays only"
+    }
+  ],
+  "text_items": [
+    {
+      "name": "CPU Number",
+      "x": 92,
+      "y": 338,
+      "font_size": 54,
+      "color": "#eee8d6"
+    },
+    {
+      "name": "GPU Number",
+      "x": 1528,
+      "y": 318,
+      "font_size": 54,
+      "color": "#eee8d6"
+    },
+    {
+      "name": "RAM Number",
+      "x": 452,
+      "y": 376,
+      "font_size": 42,
+      "color": "#eee8d6"
+    },
+    {
+      "name": "VRAM Number",
+      "x": 1110,
+      "y": 376,
+      "font_size": 42,
+      "color": "#eee8d6"
+    },
+    {
+      "name": "Clock",
+      "x": 1720,
+      "y": 400,
+      "font_size": 46,
+      "color": "#eee8d6"
+    }
+  ]
+}

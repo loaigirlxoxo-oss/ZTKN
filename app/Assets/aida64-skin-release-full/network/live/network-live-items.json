@@ -1,0 +1,43 @@
+{
+  "items": [
+    {
+      "name": "Network Download Graph",
+      "aida64_type": "Graph",
+      "sensor": "NIC download rate",
+      "x": 872,
+      "y": 306,
+      "width": 500,
+      "height": 112,
+      "line_color": "#00d2c4",
+      "background": "transparent or black with low opacity if available",
+      "range": "Set max to your expected download peak or line speed",
+      "note": "This must be an AIDA64 native Graph item. Do not use static graph PNGs for live history."
+    },
+    {
+      "name": "Network Upload Graph",
+      "aida64_type": "Graph",
+      "sensor": "NIC upload rate",
+      "x": 872,
+      "y": 306,
+      "width": 500,
+      "height": 112,
+      "line_color": "#ff3484",
+      "background": "transparent or black with low opacity if available",
+      "range": "Set max to your expected upload peak or line speed",
+      "note": "Layer on the same area as download if SensorPanel permits overlapping graph items."
+    },
+    {
+      "name": "Network Graph Frame",
+      "aida64_type": "Image",
+      "sensor": "none",
+      "x": 872,
+      "y": 306,
+      "width": 500,
+      "height": 112,
+      "line_color": "",
+      "background": "native-graph-frame-500x112.png",
+      "range": "",
+      "note": "Optional static transparent frame placed above or below native graph items depending on AIDA64 layering."
+    }
+  ]
+}

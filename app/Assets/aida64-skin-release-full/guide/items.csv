@@ -1,0 +1,6 @@
+name,type,sensor,x,y,width,height,states
+CPU Round Gauge,AIDA64 Custom Gauge,CPU Package temperature,198,326,118,118,custom-gauge-states/round/gradient-cpu-pink-yellow-lime
+GPU Round Gauge,AIDA64 Custom Gauge,GPU temperature,1602,306,118,118,custom-gauge-states/round/gradient-gpu-cyan-purple-pink
+RAM Bar,AIDA64 Custom Gauge,Memory utilization,610,382,320,48,custom-gauge-states/horizontal/ticket-strip/yellow
+VRAM Bar,AIDA64 Custom Gauge,GPU memory utilization,1280,380,330,54,custom-gauge-states/horizontal/slash-cut/lime
+Network History,AIDA64 native Graph,NIC download/upload rate,872,306,500,112,network graph PNGs are references/overlays only
