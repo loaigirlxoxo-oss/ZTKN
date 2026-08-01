@@ -59,7 +59,10 @@
       `  ${aiHookStore.status.codex_config || "(Codex 設定)"}\n` +
       `フック本体: ${aiHookStore.status.hook_exe || "(未配置)"}\n` +
       `\n既存のフック・設定は変更しません。書き換え前に .ztkn-backup へ退避します。\n` +
-      `現在: ${aiHookLabel(aiHookStore.status)}`,
+      `\nCodex はフックの変更後、承認するまで実行しません。\n` +
+      `Codex の TUI で /hooks を打ち、ZTKN のフックを信頼してください。\n` +
+      `Claude Code は再起動すると反映されます。\n` +
+      `\n現在: ${aiHookLabel(aiHookStore.status)}`,
   );
 
   // 起動時、パネルが空なら Default テンプレ(templates[0])を自動投入する。
@@ -157,6 +160,8 @@
     </label>
     {#if aiHookStore.error}
       <span class="ai-err" title={aiHookStore.error}>⚠ AI連携: {aiHookStore.error}</span>
+    {:else if aiHookStore.notice}
+      <span class="ai-note" title={aiHookStore.notice}>ℹ {aiHookStore.notice}</span>
     {/if}
     <span class="sep">|</span>
     <div class="stack2">
@@ -221,6 +226,7 @@
   .auto { color: #aaa; font-size: 12px; display: flex; align-items: center; gap: 3px; }
   /* 設定ファイルの書き換え失敗は黙って消さず出す（原因が分からないと直せないため） */
   .ai-err { color: #e88; font-size: 12px; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ai-note { color: #8ab; font-size: 12px; max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .pname { width: 110px; background: #222; color: #ddd; border: 1px solid #3a3a3a; padding: 3px 6px; }
   .ploadsel { background: #2a2a2a; color: #ddd; border: 1px solid #3a3a3a; }
   .align { display: flex; align-items: center; gap: 2px; }

@@ -9,6 +9,7 @@ export interface AiHookStatus {
   codex_config: string;
   hook_exe: string;
   hook_exe_ready: boolean;
+  codex_needs_trust: boolean; // Codexはフック変更後に承認が要る
 }
 
 const EMPTY: AiHookStatus = {
@@ -18,13 +19,21 @@ const EMPTY: AiHookStatus = {
   codex_config: "",
   hook_exe: "",
   hook_exe_ready: false,
+  codex_needs_trust: false,
 };
 
-export const aiHookStore = $state<{ status: AiHookStatus; ready: boolean; busy: boolean; error: string }>({
+export const aiHookStore = $state<{
+  status: AiHookStatus;
+  ready: boolean;
+  busy: boolean;
+  error: string;
+  notice: string; // 有効化後にユーザーがやることの案内（エラーではない）
+}>({
   status: EMPTY,
   ready: false,
   busy: false,
   error: "",
+  notice: "",
 });
 
 export async function loadAiHooks(): Promise<void> {
@@ -40,8 +49,15 @@ export async function loadAiHooks(): Promise<void> {
 export async function setAiHooks(on: boolean): Promise<void> {
   aiHookStore.busy = true;
   aiHookStore.error = "";
+  aiHookStore.notice = "";
   try {
     aiHookStore.status = await invoke<AiHookStatus>("set_ai_hooks", { enable: on });
+    if (on) {
+      // Codex は変更後のフックを承認するまで実行しない。気付けないと「動かない」で終わるので出す。
+      aiHookStore.notice = aiHookStore.status.codex_needs_trust
+        ? "Codex の TUI で /hooks を打ってフックを承認してください。Claude Code は再起動で反映されます。"
+        : "Claude Code を再起動すると反映されます。";
+    }
   } catch (e) {
     aiHookStore.error = String(e);
     await loadAiHooks(); // 実状態へ戻す
