@@ -1,7 +1,8 @@
-// Claude のプラン使用量(残量%・リセット時刻)を取得するコレクタ。
-// 参照実装 bozdemir/claude-usage-widget のプロトコルを Rust でネイティブ再現する。
-// データ源は Claude UI/CLI 自身が使う /api/oauth/usage（＝推測ではなく実値）。Python 依存なし。
-// 非公開エンドポイントなのでスキーマ変化に強いよう防御的にパースし、失敗はソフトに扱う。
+// AI ツールのプラン使用量(残量%・リセット時刻)を取得するコレクタ。
+// - Claude  : /api/oauth/usage REST API（OAuth token 認証）
+// - Codex   : ローカル CLI app-server への stdio JSON-RPC
+// - Antigravity: ローカル language_server プロセスへの HTTPS（自己署名 TLS）
+// 非公開/内部 API が多いので防御的にパースし、失敗はソフトに扱う。
 
 use std::io::{BufRead, BufReader, Write};
 use std::process::{Command, Stdio};
@@ -116,22 +117,22 @@ fn claude_sensors(u: &ClaudeUsage) -> Vec<Value> {
     sensors
 }
 
-// Claude+Codex を1つの usage イベントにまとめる。値マップを潰し合わないよう常に全部入りで出す
-// （取得失敗した提供元は None＝その分は前回値がフロントに残る形にはならないが、片方だけ出せる）。
-pub fn usage_event_json(claude: Option<&ClaudeUsage>, codex: Option<&CodexUsage>) -> String {
+// 全 AI ツールを1つの usage イベントにまとめる。常に全部入りで出す（片方だけ出すともう片方が消えるため）。
+pub fn usage_event_json(
+    claude: Option<&ClaudeUsage>,
+    codex: Option<&CodexUsage>,
+    antigravity: Option<&AntigravityUsage>,
+) -> String {
     let mut sensors: Vec<Value> = vec![];
-    if let Some(c) = claude {
-        sensors.extend(claude_sensors(c));
-    }
-    if let Some(c) = codex {
-        sensors.extend(codex_sensors(c));
-    }
+    if let Some(c) = claude { sensors.extend(claude_sensors(c)); }
+    if let Some(c) = codex { sensors.extend(codex_sensors(c)); }
+    if let Some(a) = antigravity { sensors.extend(antigravity_sensors(a)); }
     json!({ "source": "usage", "sensors": sensors }).to_string()
 }
 
 // 起動時シード等で Claude 単体を出す薄いラッパ。
 pub fn claude_usage_event_json(u: &ClaudeUsage) -> String {
-    usage_event_json(Some(u), None)
+    usage_event_json(Some(u), None, None)
 }
 
 // OAuth アクセストークンを Claude Code と同じ探索順で得る。
@@ -374,6 +375,242 @@ pub fn fetch_codex_usage() -> Result<CodexUsage, String> {
     }
 }
 
+// ---- Antigravity (Google) の使用量 ----
+// ag-quota VSCode 拡張 (henrikdev.ag-quota) のプロトコルを Rust で再現。
+// language_server_windows_x64.exe のコマンドライン引数から port/token を取得し、
+// ローカル HTTPS (自己署名証明書) で GetUserStatus を呼ぶ。
+
+#[derive(Debug, Clone, Serialize, PartialEq, Default)]
+pub struct AntigravityUsage {
+    pub credits_used_pct: Option<f64>, // 月間プロンプトクレジット使用率 0..100
+    pub models: Vec<AgModel>,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct AgModel {
+    pub label: String,
+    pub used_pct: f64,  // (1 - remainingFraction) * 100
+    pub reset_ms: i64,
+}
+
+fn antigravity_sensors(u: &AntigravityUsage) -> Vec<Value> {
+    let mut s = vec![];
+    if let Some(pct) = u.credits_used_pct {
+        s.push(json!({
+            "id": "Antigravity|クレジット使用率|Usage",
+            "name": "クレジット使用率",
+            "hw": "Antigravity",
+            "type": "Usage",
+            "unit": "%",
+            "value": pct
+        }));
+    }
+    for m in &u.models {
+        s.push(json!({
+            "id": format!("Antigravity|{}|Usage", m.label),
+            "name": m.label.clone(),
+            "hw": "Antigravity",
+            "type": "Usage",
+            "unit": "%",
+            "value": m.used_pct
+        }));
+        if m.reset_ms > 0 {
+            s.push(json!({
+                "id": format!("Antigravity|{} リセット|Reset", m.label),
+                "name": format!("{} リセット", m.label),
+                "hw": "Antigravity",
+                "type": "Reset",
+                "unit": "",
+                "value": m.reset_ms
+            }));
+        }
+    }
+    s
+}
+
+// コマンドライン文字列から `--flag` の値を抽出する（`--flag=val` / `--flag val` 両形式対応）。
+fn extract_cmdline_arg(cmd: &str, flag: &str) -> Option<String> {
+    let cmd_lower = cmd.to_ascii_lowercase();
+    let flag_lower = flag.to_ascii_lowercase();
+    let pos = cmd_lower.find(&flag_lower)?;
+    let after = cmd[pos + flag.len()..].trim_start_matches(['=', ' ', '\t']);
+    let end = after.find(|c: char| c.is_whitespace()).unwrap_or(after.len());
+    let val = after[..end].trim().to_string();
+    if val.is_empty() { None } else { Some(val) }
+}
+
+fn is_antigravity_process(cmd: &str) -> bool {
+    let lower = cmd.to_ascii_lowercase();
+    lower.contains("--app_data_dir antigravity")
+        || lower.contains("\\antigravity\\")
+        || lower.contains("/antigravity/")
+}
+
+// language_server_windows_x64.exe のプロセスリストから (pid, extension_port, csrf_token) を取得。
+#[cfg(windows)]
+fn find_ag_process() -> Option<(u32, u16, String)> {
+    let ps = r#"Get-CimInstance Win32_Process -Filter "name='language_server.exe'" | Select-Object ProcessId,CommandLine | ConvertTo-Json -Compress"#;
+    let mut cmd = Command::new("powershell");
+    cmd.args(["-NoProfile", "-NonInteractive", "-Command", ps]);
+    cmd.stdout(Stdio::piped()).stderr(Stdio::null());
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x08000000);
+    }
+    let out = cmd.output().ok()?;
+    let text = String::from_utf8_lossy(&out.stdout);
+    let text = text.trim();
+    if text.is_empty() { return None; }
+    let v: Value = serde_json::from_str(text).ok()?;
+    let items: Vec<&Value> = match v.as_array() {
+        Some(arr) => arr.iter().collect(),
+        None => vec![&v],
+    };
+    for item in items {
+        let cmd_line = item["CommandLine"].as_str().unwrap_or("");
+        if !is_antigravity_process(cmd_line) { continue; }
+        let pid = item["ProcessId"].as_u64()? as u32;
+        let port: u16 = extract_cmdline_arg(cmd_line, "--https_server_port")
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(0);
+        let token = extract_cmdline_arg(cmd_line, "--csrf_token")?;
+        return Some((pid, port, token));
+    }
+    None
+}
+
+// PID がリッスン中の TCP ポート一覧を返す。
+#[cfg(windows)]
+fn get_ag_listening_ports(pid: u32) -> Vec<u16> {
+    let ps = format!(
+        "Get-NetTCPConnection -OwningProcess {pid} -State Listen | Select-Object -ExpandProperty LocalPort | ConvertTo-Json -Compress"
+    );
+    let mut cmd = Command::new("powershell");
+    cmd.args(["-NoProfile", "-NonInteractive", "-Command", ps.as_str()]);
+    cmd.stdout(Stdio::piped()).stderr(Stdio::null());
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x08000000);
+    }
+    let out = match cmd.output() { Ok(o) => o, Err(_) => return vec![] };
+    let text = String::from_utf8_lossy(&out.stdout);
+    let v: Value = match serde_json::from_str(text.trim()) { Ok(v) => v, Err(_) => return vec![] };
+    let mut ports = vec![];
+    match &v {
+        Value::Array(arr) => { for x in arr { if let Some(p) = x.as_u64() { ports.push(p as u16); } } }
+        Value::Number(n) => { if let Some(p) = n.as_u64() { ports.push(p as u16); } }
+        _ => {}
+    }
+    ports.sort();
+    ports
+}
+
+// ポートが実際に Antigravity の API ポートか簡易ヘルスチェック。
+fn test_ag_port(port: u16, token: &str) -> bool {
+    let Ok(tls) = native_tls::TlsConnector::builder()
+        .danger_accept_invalid_certs(true)
+        .build()
+    else { return false; };
+    let agent = ureq::AgentBuilder::new()
+        .tls_connector(std::sync::Arc::new(tls))
+        .timeout_connect(Duration::from_secs(2))
+        .timeout_read(Duration::from_secs(3))
+        .build();
+    let url = format!(
+        "https://127.0.0.1:{port}/exa.language_server_pb.LanguageServerService/GetUnleashData"
+    );
+    agent.post(&url)
+        .set("Content-Type", "application/json")
+        .set("Connect-Protocol-Version", "1")
+        .set("X-Codeium-Csrf-Token", token)
+        .send_string(r#"{"wrapper_data":{}}"#)
+        .is_ok()
+}
+
+pub fn parse_antigravity_usage(body: &str) -> Result<AntigravityUsage, String> {
+    let v: Value = serde_json::from_str(body).map_err(|e| format!("json: {e}"))?;
+    let us = &v["userStatus"];
+
+    let credits_used_pct = {
+        let monthly = us["planStatus"]["planInfo"]["monthlyPromptCredits"].as_f64().unwrap_or(0.0);
+        let available = us["planStatus"]["availablePromptCredits"].as_f64().unwrap_or(0.0);
+        if monthly > 0.0 {
+            Some(((monthly - available) / monthly * 100.0).clamp(0.0, 100.0))
+        } else {
+            None
+        }
+    };
+
+    let models = if let Some(arr) = us["cascadeModelConfigData"]["clientModelConfigs"].as_array() {
+        arr.iter()
+            .filter(|m| m["quotaInfo"].is_object())
+            .filter_map(|m| {
+                let label = m["label"].as_str()?.to_string();
+                let remaining = m["quotaInfo"]["remainingFraction"].as_f64().unwrap_or(1.0);
+                let reset_ms = iso_to_epoch_ms(&m["quotaInfo"]["resetTime"]);
+                Some(AgModel {
+                    label,
+                    used_pct: ((1.0 - remaining) * 100.0).clamp(0.0, 100.0),
+                    reset_ms,
+                })
+            })
+            .collect()
+    } else {
+        vec![]
+    };
+
+    Ok(AntigravityUsage { credits_used_pct, models })
+}
+
+#[cfg(windows)]
+pub fn fetch_antigravity_usage() -> Result<AntigravityUsage, String> {
+    let (pid, ext_port, token) =
+        find_ag_process().ok_or("Antigravity: language_server not found (not running?)")?;
+
+    // extension_port を優先。候補がなければ全 Listen ポートをスキャン。
+    let mut candidates: Vec<u16> = vec![];
+    if ext_port > 0 { candidates.push(ext_port); }
+    for p in get_ag_listening_ports(pid) { if p != ext_port { candidates.push(p); } }
+
+    let port = candidates
+        .into_iter()
+        .find(|&p| test_ag_port(p, &token))
+        .ok_or_else(|| format!("Antigravity: no responding port (PID={pid})"))?;
+
+    let tls = native_tls::TlsConnector::builder()
+        .danger_accept_invalid_certs(true)
+        .build()
+        .map_err(|e| format!("tls: {e}"))?;
+    let agent = ureq::AgentBuilder::new()
+        .tls_connector(std::sync::Arc::new(tls))
+        .timeout_connect(Duration::from_secs(3))
+        .timeout_read(Duration::from_secs(5))
+        .build();
+
+    let url = format!(
+        "https://127.0.0.1:{port}/exa.language_server_pb.LanguageServerService/GetUserStatus"
+    );
+    let body = json!({
+        "metadata": { "ideName": "antigravity", "extensionName": "antigravity", "locale": "en" }
+    })
+    .to_string();
+
+    let resp = agent
+        .post(&url)
+        .set("Content-Type", "application/json")
+        .set("Connect-Protocol-Version", "1")
+        .set("X-Codeium-Csrf-Token", &token)
+        .send_string(&body)
+        .map_err(|e| format!("request: {e}"))?;
+
+    parse_antigravity_usage(&resp.into_string().map_err(|e| format!("body: {e}"))?)
+}
+
+#[cfg(not(windows))]
+pub fn fetch_antigravity_usage() -> Result<AntigravityUsage, String> {
+    Err("Antigravity: Windows only".into())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -501,10 +738,82 @@ mod tests {
                     "REAL Codex usage: has5h={} 5h={:.1}%(reset_ms={}) / has7d={} 7d={:.1}%(reset_ms={})",
                     u.has_5h, u.h5_pct, u.h5_reset, u.has_7d, u.d7_pct, u.d7_reset
                 );
-                println!("EVENT JSON: {}", usage_event_json(None, Some(&u)));
+                println!("EVENT JSON: {}", usage_event_json(None, Some(&u), None));
                 assert!(u.has_5h || u.has_7d);
             }
             Err(e) => panic!("codex fetch failed: {e}"),
+        }
+    }
+
+    #[test]
+    fn antigravity_parse_credits_and_models() {
+        let body = r#"{
+            "userStatus": {
+                "planStatus": {
+                    "planInfo": { "monthlyPromptCredits": 1000 },
+                    "availablePromptCredits": 750
+                },
+                "cascadeModelConfigData": {
+                    "clientModelConfigs": [
+                        {
+                            "label": "Cascade Base",
+                            "quotaInfo": { "remainingFraction": 0.8, "resetTime": "2026-07-25T00:00:00Z" }
+                        },
+                        {
+                            "label": "Cascade Frontier",
+                            "quotaInfo": { "remainingFraction": 0.3, "resetTime": "2026-07-25T00:00:00Z" }
+                        }
+                    ]
+                }
+            }
+        }"#;
+        let u = parse_antigravity_usage(body).unwrap();
+        assert_eq!(u.credits_used_pct, Some(25.0)); // (1000-750)/1000*100
+        assert_eq!(u.models.len(), 2);
+        assert_eq!(u.models[0].label, "Cascade Base");
+        assert!((u.models[0].used_pct - 20.0).abs() < 0.01); // (1-0.8)*100
+        assert_eq!(u.models[1].label, "Cascade Frontier");
+        assert!((u.models[1].used_pct - 70.0).abs() < 0.01); // (1-0.3)*100
+        assert!(u.models[0].reset_ms > 0);
+    }
+
+    #[test]
+    fn antigravity_parse_no_credits_no_models() {
+        let u = parse_antigravity_usage(r#"{"userStatus":{}}"#).unwrap();
+        assert!(u.credits_used_pct.is_none());
+        assert!(u.models.is_empty());
+    }
+
+    #[test]
+    fn antigravity_sensors_emits_correct_ids() {
+        let u = AntigravityUsage {
+            credits_used_pct: Some(25.0),
+            models: vec![AgModel { label: "Frontier".into(), used_pct: 70.0, reset_ms: 1_700_000_000_000 }],
+        };
+        let s = antigravity_sensors(&u);
+        assert_eq!(s.len(), 3); // credits + model_pct + model_reset
+        assert_eq!(s[0]["id"], "Antigravity|クレジット使用率|Usage");
+        assert_eq!(s[0]["hw"], "Antigravity");
+        assert_eq!(s[0]["value"], 25.0);
+        assert_eq!(s[1]["id"], "Antigravity|Frontier|Usage");
+        assert_eq!(s[2]["id"], "Antigravity|Frontier リセット|Reset");
+        assert_eq!(s[2]["type"], "Reset");
+    }
+
+    // 実 Antigravity プロセスを叩く実測テスト（Antigravity 起動中のみ動作）。
+    // 実行: cargo test real_antigravity_usage -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn real_antigravity_usage() {
+        match fetch_antigravity_usage() {
+            Ok(u) => {
+                println!("REAL Antigravity: credits={:?}%", u.credits_used_pct);
+                for m in &u.models {
+                    println!("  model={} used={:.1}% reset_ms={}", m.label, m.used_pct, m.reset_ms);
+                }
+                assert!(u.credits_used_pct.is_some() || !u.models.is_empty());
+            }
+            Err(e) => panic!("antigravity fetch failed: {e}"),
         }
     }
 

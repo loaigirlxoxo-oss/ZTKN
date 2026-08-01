@@ -5,8 +5,8 @@ import { editor } from "$lib/editor/editorState.svelte";
 export interface LiveSensor { id: string; name: string; hw: string; type: string; unit: string; }
 interface RawSensor extends LiveSensor { value: number; }
 
-const CATALOG_KEY = "sensor-catalog-v3"; // 一度見たセンサーを記憶（ピッカー用）。v3=合成キーID方式（旧版の混入を一掃）
-const OLD_KEYS = ["sensor-catalog-v1", "sensor-catalog-v2"]; // 旧ID方式の残骸。読まない＆掃除する
+const CATALOG_KEY = "sensor-catalog-v4"; // v4=hw/name変更追跡（旧版の stale hw 値を一掃）
+const OLD_KEYS = ["sensor-catalog-v1", "sensor-catalog-v2", "sensor-catalog-v3"]; // 旧版を掃除
 const hasLS = typeof localStorage !== "undefined";
 
 // サイドカー(LHM)からの実センサーをフロントへ取り込むハブ。
@@ -60,16 +60,18 @@ class SensorHub {
     let payload: { sensors: RawSensor[] };
     try { payload = JSON.parse(raw); } catch { return; }
     const m = new Map<string, number>();
-    let grew = false;
+    let changed = false;
     for (const s of payload.sensors) {
       m.set(s.id, s.value);
-      if (!this.catalog.has(s.id)) {
+      const existing = this.catalog.get(s.id);
+      // hw/name/type が変わった場合も更新（コードバージョンアップ追従）
+      if (!existing || existing.hw !== s.hw || existing.name !== s.name || existing.type !== s.type) {
         this.catalog.set(s.id, { id: s.id, name: s.name, hw: s.hw, type: s.type, unit: s.unit });
-        grew = true;
+        changed = true;
       }
     }
     editor.setUsageValues(m);
-    if (grew) { this.list = this.sorted(); this.persist(); }
+    if (changed) { this.list = this.sorted(); this.persist(); }
   }
 
   async start(): Promise<void> {

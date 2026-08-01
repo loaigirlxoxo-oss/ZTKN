@@ -291,28 +291,36 @@ fn get_claude_usage_event() -> Result<String, String> {
     usage::fetch_claude_usage().map(|u| usage::claude_usage_event_json(&u))
 }
 
-// Claude+Codex 使用量を定期取得して "usage" イベントで流すバックグラウンドポーラー。
-// 実センサー("sensors")とは別イベント＝値マップを潰さない。Claude+Codexは常に一括で出す
-// （usageValuesは差し替え方式なので片方だけ出すともう片方が消えるため）。失敗はログのみ。
+// 全 AI ツール使用量を定期取得して "usage" イベントで流すバックグラウンドポーラー。
+// 実センサー("sensors")とは別イベント＝値マップを潰さない。全ツール常に一括で出す
+// （usageValues は差し替え方式なので一部だけ出すと他が消えるため）。失敗はログのみ。
 fn start_usage_poller(app: AppHandle) {
     std::thread::spawn(move || {
         // 直近値をキャッシュ＝一時的な取得失敗でも前回値を出し続ける（表示が消えない）。
         let mut claude_cache: Option<usage::ClaudeUsage> = None;
         let mut codex_cache: Option<usage::CodexUsage> = None;
+        let mut ag_cache: Option<usage::AntigravityUsage> = None;
         let mut tick = 0u64;
         loop {
             match usage::fetch_claude_usage() {
                 Ok(u) => claude_cache = Some(u),
-                Err(e) => eprintln!("[usage] claude: {e}"), // 未ログイン/オフライン等（キャッシュ維持）
+                Err(e) => eprintln!("[usage] claude: {e}"),
             }
-            // Codexは app-server 起動が重いので5分に1回だけ更新（それ以外はキャッシュ値を使う）
+            // Codex / Antigravity はプロセス起動・スキャンが重いので5分に1回
             if tick % 5 == 0 {
                 match usage::fetch_codex_usage() {
                     Ok(c) => codex_cache = Some(c),
                     Err(e) => eprintln!("[usage] codex: {e}"),
                 }
+                match usage::fetch_antigravity_usage() {
+                    Ok(a) => ag_cache = Some(a),
+                    Err(e) => eprintln!("[usage] antigravity: {e}"),
+                }
             }
-            let _ = app.emit("usage", usage::usage_event_json(claude_cache.as_ref(), codex_cache.as_ref()));
+            let _ = app.emit(
+                "usage",
+                usage::usage_event_json(claude_cache.as_ref(), codex_cache.as_ref(), ag_cache.as_ref()),
+            );
             tick += 1;
             std::thread::sleep(std::time::Duration::from_secs(60));
         }

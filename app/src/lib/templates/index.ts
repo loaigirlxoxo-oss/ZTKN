@@ -3,6 +3,7 @@ import { buildDefaultTemplate } from "./default";
 import { buildNeonTemplate } from "./neon";
 import { buildMinimalTemplate } from "./minimal";
 import { buildDenseTemplate } from "./dense";
+import { buildAidaMonitorTemplate } from "./aida-monitor";
 
 export interface Template { name: string; build: () => Panel; }
 
@@ -12,4 +13,5 @@ export const templates: Template[] = [
   { name: "Neon（ゲージ＋グラフ）", build: buildNeonTemplate },
   { name: "Minimal（数値中心）", build: buildMinimalTemplate },
   { name: "Dense（コアびっしり）", build: buildDenseTemplate },
+  { name: "AIDA監視パンク（ポスター）", build: buildAidaMonitorTemplate },
 ];
