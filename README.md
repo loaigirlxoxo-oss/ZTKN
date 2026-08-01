@@ -103,36 +103,71 @@ Claude Code / Codex CLI の状態をサブモニタに出せます。値は**す
 - センサーピッカーの **Claude / Codex グループ**に「5h 使用率」「7d 使用率」「リセット」等が出るので、ゲージ・バー・数値・カウントダウン（`残り %t`）に割り当てられます。
 - 更新間隔: Claude 約 60 秒 / Codex 約 300 秒。
 
-### 2. 承認待ち / 実行中アラート — Claude Code / Codex フックのセットアップが必要
+### 2. 承認待ち / 実行中アラート — ツールバーの「AI連携」で有効化
 
 セッションが「実行中」「承認待ち（コマンド許可ダイアログで停止中）」の状態を、フックが状態ファイルに書き、ZTKN が読んで表示します。**複数インスタンス並行対応**（session_id で個別管理・作業フォルダ名で識別）。
 
-**セットアップ:**
+ツールバーの **「AI連携」チェックボックス** を入れると、Claude Code と Codex CLI の設定ファイルにフックが書き込まれます。外すと元に戻ります。ZTKN 側では「実行中 / 承認待ち」センサー（Claude / Codex グループ）や部品「**⚠ 承認待ち一覧**」を配置してください（内蔵の **Default テンプレ**には既に入っています）。
 
-1. フックヘルパー `ztkn-hook.exe` をビルド: `cd app/src-tauri && cargo build -p ztkn-hook` → `target/debug/ztkn-hook.exe`（配布時は同梱）。**ztkn-hook はアプリ本体と別の独立クレート**なので tauri の `requireAdministrator` マニフェストを継承せず、非昇格の Codex/Claude から呼ばれても **UAC が出ない**。GUIサブシステムなので**黒窓も出ない**。
-2. Claude Code の設定 `~/.claude/settings.json`（環境変数 `CLAUDE_CONFIG_DIR` があればそちら）の `hooks` に追記（**既存フックは保持してマージ**）。`<PATH>` は上の exe の絶対パス:
+#### 何が書き込まれるか
 
-   | フックイベント | コマンド | 意味 |
-   |-|-|-|
-   | `UserPromptSubmit` | `"<PATH>" running` | ターン開始＝実行中 |
-   | `PermissionRequest` | `"<PATH>" wait` | 承認待ち |
-   | `PostToolUse` | `"<PATH>" running` | 承認後は実行中へ戻す |
-   | `Stop` | `"<PATH>" clear` | ターン終了＝解除 |
+他人の設定ファイルを触る機能なので、内容を明示します。**既存のフックや設定には一切変更を加えません。**
+書き換える前に元ファイルを `<元の名前>.ztkn-backup` として同じ場所に退避します。
 
-   各コマンドはフック JSON を stdin で受け取り、`~/.claude/ztkn-state/<session_id>.json` に `{provider, status, cwd, ts}` を書き（`clear` は削除）します。
+**1. フック実行ファイルの配置**
 
-   **Codex CLI** の場合は `~/.codex/config.toml` に同じ 4 イベントを追記します。**Windows では Codex はフックを WSL 経由で実行する**ため、必ず **`command_windows` にネイティブ exe パス**を指定し、第 2 引数に `codex` を渡します（Claude と同じ ztkn-hook を `provider=codex` で共有）:
+```
+C:\ProgramData\ZTKN\ztkn-hook.exe   ← インストーラ同梱のものをコピー
+```
 
-   ```toml
-   [[hooks.PermissionRequest]]
-   [[hooks.PermissionRequest.hooks]]
-   type = "command"
-   command = '/d/.../ztkn-hook.exe wait codex'           # 非Windowsフォールバック
-   command_windows = 'D:\...\ztkn-hook.exe wait codex'   # Windowsはこちらが使われる
-   # UserPromptSubmit→running / PostToolUse→running / Stop→clear も同様
-   ```
-   Codex TUI で `/hooks` を打つと有効化状態（Installed/Active）を確認できます。
-3. ZTKN 側で「実行中 / 承認待ち」センサー（Claude / Codex グループ）や部品「**⚠ 承認待ち一覧**」（プロパティの「対象」で Claude / Codex / 全部を選択）を配置。内蔵の **Default テンプレ**には既に左右分割で入っています。
+インストール先（`C:\Program Files\ZTKN\`）ではなくここに置くのは、パスにスペースが含まれると
+Codex 側のコマンド文字列で正しく解釈されない可能性があるためです。
+
+**2. `~/.claude/settings.json`**（環境変数 `CLAUDE_CONFIG_DIR` があればそちら）
+
+`hooks` の下の4イベントに、それぞれ次の形のエントリを1つ追加します。
+
+```json
+{ "hooks": [{ "type": "command", "command": "bash -c '/c/ProgramData/ZTKN/ztkn-hook.exe running'" }] }
+```
+
+| イベント | 引数 | 意味 |
+|-|-|-|
+| `UserPromptSubmit` | `running` | ターン開始＝実行中 |
+| `PermissionRequest` | `wait` | 承認待ち |
+| `PostToolUse` | `running` | 承認後は実行中へ戻す |
+| `Stop` | `clear` | ターン終了＝解除 |
+
+Claude Code は Windows でもフックを bash 経由で実行するため、Git Bash 形式のパス（`/c/...`）を使います。
+
+**3. `~/.codex/config.toml`**（環境変数 `CODEX_HOME` があればそちら）
+
+同じ4イベントに次を追加します。Windows では `command_windows` が使われます（指定しないと WSL 経由になる）。
+
+```toml
+[[hooks.PermissionRequest]]
+[[hooks.PermissionRequest.hooks]]
+type = "command"
+command = '/c/ProgramData/ZTKN/ztkn-hook.exe wait codex'
+command_windows = 'C:\ProgramData\ZTKN\ztkn-hook.exe wait codex'
+```
+
+第2引数の `codex` は、Claude と同じ実行ファイルを共用しつつ表示を分けるためのものです。
+Codex TUI で `/hooks` を打つと有効化状態（Installed/Active）を確認できます。
+
+#### フックが行うこと
+
+`ztkn-hook.exe` はフック JSON を標準入力で受け取り、`~/.claude/ztkn-state/<session_id>.json` に
+`{session_id, cwd, ts, pid, provider, status}` を書きます（`clear` はファイル削除）。
+外部への通信は行いません。ZTKN はこのファイルを読むだけです。
+
+**ztkn-hook はアプリ本体と別の独立クレート**なので tauri の `requireAdministrator` マニフェストを
+継承せず、非昇格の Codex/Claude から呼ばれても **UAC が出ません**。GUIサブシステムなので**黒窓も出ません**。
+
+#### 手で設定したい場合
+
+上記の内容を自分で書いても同じです。ZTKN は `ztkn-hook.exe` を含むコマンド文字列を目印に
+自分が入れたエントリを識別するので、手で書いたものも「AI連携」を外せば一緒に削除されます。
 
 - **更新間隔: 2 秒**（フックは即時、ZTKN のポーリングが 2 秒）。
 - **フォルダ検出**は決め打ちせず、各 CLI と同じ解決順（環境変数 → 実ホーム）を使うため、プロファイルや設定が D: 等の変則位置でも追従します。表示される作業フォルダはフックの `cwd` 実値です。
@@ -140,8 +175,10 @@ Claude Code / Codex CLI の状態をサブモニタに出せます。値は**す
 ### 制限・注意
 
 - **Codex の承認待ち/実行中も対応済み**（`config.toml` の hooks + `command_windows` でネイティブ実行）。Claude Code と同じ ztkn-hook を `provider=codex` で共有します。
-- 上記フック設定は**このリポジトリの開発機向けのローカル設定**です。**配布パッケージでは未自動化** — 配布対応するには ① `ztkn-hook.exe` をインストーラ同梱 ② アプリ内「AI 連携を有効化」ボタンで Claude の `settings.json` と Codex の `config.toml`（`command_windows` にネイティブパス）を冪等マージ、が必要です。
-- Claude Code / Codex を使っていない環境では何も起きません（エラーも出ません）。
+- Claude Code / Codex を使っていない環境では何も起きません（エラーも出ません）。設定ファイルが無い場合は作成します。
+- 「AI連携」を入れ直しても設定は重複しません（既存の ZTKN 分を消してから入れ直すため）。
+- 設定ファイルの書き換えに失敗した場合はツールバーに理由を表示します。退避した `.ztkn-backup` から戻せます。
+- **フックの反映には各 CLI の再起動が必要な場合があります**（設定を起動時に読むため）。
 
 ---
 

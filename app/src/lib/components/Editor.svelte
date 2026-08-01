@@ -12,6 +12,7 @@
   import { view } from "$lib/editor/view.svelte";
   import { monitorStore, loadMonitors, selectMonitor, monitorLabel } from "$lib/editor/monitors.svelte";
   import { autostartStore, loadAutostart, toggleAutostart } from "$lib/editor/autostart.svelte";
+  import { aiHookStore, loadAiHooks, setAiHooks, aiHookLabel } from "$lib/editor/aihooks.svelte";
 
   let msg = $state("");
   let showAssets = $state(true);
@@ -48,6 +49,18 @@
 
   loadMonitors(); // 接続中ディスプレイ一覧を取得（表示モニタ選択用）
   loadAutostart(); // OS自動起動の現在状態を取得
+  loadAiHooks(); // AI連携フックの導入状態を取得
+
+  // 何をどこへ書き込むかをツールチップで事前に見せる（他アプリの設定を触るため）
+  const aiHookTip = $derived(
+    `Claude Code / Codex の「実行中・承認待ち」を取得するためのフックを設定します。\n` +
+      `\n書き込み先:\n` +
+      `  ${aiHookStore.status.claude_config || "(Claude 設定)"}\n` +
+      `  ${aiHookStore.status.codex_config || "(Codex 設定)"}\n` +
+      `フック本体: ${aiHookStore.status.hook_exe || "(未配置)"}\n` +
+      `\n既存のフック・設定は変更しません。書き換え前に .ztkn-backup へ退避します。\n` +
+      `現在: ${aiHookLabel(aiHookStore.status)}`,
+  );
 
   // 起動時、パネルが空なら Default テンプレ(templates[0])を自動投入する。
   // センサーが揃ってから組む（実機バインドのため）。保存パネル読込時は items>0 なので上書きしない。
@@ -136,6 +149,15 @@
       <input type="checkbox" checked={autostartStore.enabled} disabled={!autostartStore.ready}
         onchange={(e) => toggleAutostart(e.currentTarget.checked)} /> 自動起動
     </label>
+    <label class="auto" title={aiHookTip}>
+      <input type="checkbox"
+        checked={aiHookStore.status.claude_enabled || aiHookStore.status.codex_enabled}
+        disabled={!aiHookStore.ready || aiHookStore.busy}
+        onchange={(e) => setAiHooks(e.currentTarget.checked)} /> AI連携
+    </label>
+    {#if aiHookStore.error}
+      <span class="ai-err" title={aiHookStore.error}>⚠ AI連携: {aiHookStore.error}</span>
+    {/if}
     <span class="sep">|</span>
     <div class="stack2">
       <label class="size">幅 <input type="number" min="100" bind:value={editor.panel.size.w} /></label>
@@ -197,6 +219,8 @@
   .size { color: #aaa; font-size: 12px; display: flex; align-items: center; gap: 4px; }
   .size input { width: 70px; background: #222; color: #ddd; border: 1px solid #3a3a3a; }
   .auto { color: #aaa; font-size: 12px; display: flex; align-items: center; gap: 3px; }
+  /* 設定ファイルの書き換え失敗は黙って消さず出す（原因が分からないと直せないため） */
+  .ai-err { color: #e88; font-size: 12px; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .pname { width: 110px; background: #222; color: #ddd; border: 1px solid #3a3a3a; padding: 3px 6px; }
   .ploadsel { background: #2a2a2a; color: #ddd; border: 1px solid #3a3a3a; }
   .align { display: flex; align-items: center; gap: 2px; }

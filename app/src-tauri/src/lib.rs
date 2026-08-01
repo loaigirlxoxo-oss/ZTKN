@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use tauri::{AppHandle, Emitter, Manager};
 
+mod aihooks; // Claude/Codex のフック設定の導入・削除
 mod usage; // AI使用量(プラン残量%・5h/7d枠)の取得
 
 // センサーサイドカー(.NET)の実行ファイルパスを解決する。
@@ -426,6 +427,17 @@ fn agent_count_usage_json(list: &[serde_json::Value]) -> String {
     .to_string()
 }
 
+// AI連携フック（Claude/Codex の設定ファイルへの書き込み）の状態取得・切り替え。
+#[tauri::command]
+fn ai_hooks_status() -> aihooks::AiHookStatus {
+    aihooks::status()
+}
+
+#[tauri::command]
+fn set_ai_hooks(enable: bool) -> Result<aihooks::AiHookStatus, String> {
+    if enable { aihooks::enable() } else { aihooks::disable() }
+}
+
 // 起動直後の種（poller初回emit取り逃し対策）。フォルダ一覧JSONを返す。
 #[tauri::command]
 fn get_agent_alerts() -> String {
@@ -518,7 +530,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             save_panel, load_panel, list_panels,
             assets_root, open_assets_dir, list_asset_sets, list_fonts, list_images, open_images_dir,
-            get_claude_usage_event, get_agent_alerts
+            get_claude_usage_event, get_agent_alerts, ai_hooks_status, set_ai_hooks
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

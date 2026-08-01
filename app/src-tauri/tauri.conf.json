@@ -6,7 +6,7 @@
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "npm run build",
+    "beforeBuildCommand": "npm run build && cargo build --release -p ztkn-hook --manifest-path src-tauri/Cargo.toml",
     "frontendDist": "../build"
   },
   "app": {
@@ -45,6 +45,7 @@
     "targets": ["nsis"],
     "resources": {
       "binaries/sensor-sidecar-x86_64-pc-windows-msvc.exe": "sensor-sidecar.exe",
+      "target/release/ztkn-hook.exe": "ztkn-hook.exe",
       "installer-deps/PawnIO_setup.exe": "PawnIO_setup.exe",
       "../Assets": "Assets",
       "../Panels": "Panels"

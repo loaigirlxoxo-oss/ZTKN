@@ -36,4 +36,7 @@ dirs = "5"
 ureq = { version = "2", default-features = false, features = ["native-tls"] }
 native-tls = "0.2" # ureqへ明示注入するSChannelコネクタ（native-tlsは手動配線が要る）
 chrono = { version = "0.4", default-features = false, features = ["std"] }
+# AI連携フックの設定書き込み用。Codex の config.toml は利用者が手で書いた設定・コメントが
+# 入っているため、丸ごと再生成せず該当箇所だけ差し替える toml_edit を使う。
+toml_edit = "0.22"
 
