@@ -358,6 +358,9 @@ fn install_hook_exe() -> Result<PathBuf, String> {
 
 pub fn enable() -> Result<AiHookStatus, String> {
     let exe = install_hook_exe()?;
+    // 前回の無効化中に取り残された状態があれば消してから始める。
+    // 生きているセッションは次のフック発火で書き直されるので実害はない。
+    clear_all_state();
     // 片方が失敗しても、もう片方は入れる。両方の結果をまとめて返す。
     let c = write_claude(&exe, true);
     let x = write_codex(&exe, true);
@@ -369,10 +372,44 @@ pub fn enable() -> Result<AiHookStatus, String> {
     }
 }
 
+// 状態ファイルの置き場。フック(ztkn-hook)が書き、ZTKN が読む。
+pub fn state_dir() -> Option<PathBuf> {
+    Some(dirs::home_dir()?.join(".claude").join("ztkn-state"))
+}
+
+// 状態ファイルを全部消す。無効化したのに「実行中」が残り続けないようにするため。
+// 無効化するとフックが動かなくなり Stop も飛ばないので、ここで消さないと
+// セッションが終わるまで表示が残ってしまう。
+pub fn clear_all_state() -> usize {
+    let Some(dir) = state_dir() else { return 0 };
+    let Ok(rd) = std::fs::read_dir(&dir) else { return 0 };
+    let mut n = 0;
+    for e in rd.flatten() {
+        let p = e.path();
+        if p.extension().and_then(|s| s.to_str()) == Some("json") && std::fs::remove_file(&p).is_ok() {
+            n += 1;
+        }
+    }
+    n
+}
+
 pub fn disable() -> Result<AiHookStatus, String> {
     let exe = hook_exe_dest();
     let c = write_claude(&exe, false);
     let x = write_codex(&exe, false);
+    // 起動中の CLI が設定をキャッシュしていると、設定から消してもフックが呼ばれ続ける。
+    // 実行ファイルごと消せば呼ばれても何も起きない（フック側はエラーでも CLI を止めない）。
+    // 有効化し直す時に enable() が置き直すので、消して困ることはない。
+    if exe.is_file() {
+        if let Err(e) = std::fs::remove_file(&exe) {
+            eprintln!("[aihooks] {} を消せませんでした: {e}", exe.display());
+        }
+    }
+    // フックを外した以上、残った状態は更新されない。表示を即座に止めるため消す。
+    let n = clear_all_state();
+    if n > 0 {
+        eprintln!("[aihooks] 状態ファイルを {n} 件削除しました");
+    }
     match (c, x) {
         (Err(a), Err(b)) => Err(format!("Claude: {a} / Codex: {b}")),
         (Err(a), Ok(())) => Err(format!("Claude: {a}")),
@@ -708,6 +745,30 @@ command = "my-own-hook"
         // 本物が無傷であること
         let orig: Value = serde_json::from_str(&std::fs::read_to_string(&real_claude).unwrap()).unwrap();
         assert!(orig["hooks"].is_object(), "本物のsettings.jsonが読めない＝壊した可能性");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // 無効化したら状態ファイルが残らないこと（残ると「実行中」が表示されっぱなしになる）
+    #[test]
+    fn clear_all_state_removes_only_json() {
+        let dir = temp_dir("state");
+        std::fs::write(dir.join("a.json"), "{}").unwrap();
+        std::fs::write(dir.join("b.json"), "{}").unwrap();
+        std::fs::write(dir.join("keep.txt"), "x").unwrap();
+
+        // clear_all_state はホーム配下を見るので、ここでは同じ処理を再現して検証する
+        let mut n = 0;
+        for e in std::fs::read_dir(&dir).unwrap().flatten() {
+            let p = e.path();
+            if p.extension().and_then(|s| s.to_str()) == Some("json") && std::fs::remove_file(&p).is_ok() {
+                n += 1;
+            }
+        }
+        assert_eq!(n, 2);
+        assert!(!dir.join("a.json").exists());
+        assert!(!dir.join("b.json").exists());
+        assert!(dir.join("keep.txt").exists(), "json以外まで消してはいけない");
 
         let _ = std::fs::remove_dir_all(&dir);
     }

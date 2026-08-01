@@ -355,9 +355,29 @@ fn is_pid_alive(pid: u32) -> bool {
 #[cfg(not(windows))]
 fn is_pid_alive(_pid: u32) -> bool { false }
 
+// 状態ファイルを「古い」とみなすまでの時間。
+// running は Stop フックで消えるのが正常系なので、消え残りより「実行中なのに出ない」を避けたい。
+// 単一のツール実行が長引いても消えないよう長めに取る。
+const RUNNING_STALE_SECS: u64 = 3600; // 1時間
+const WAITING_STALE_SECS: u64 = 900; // 15分（承認を放置した場合の掃除）
+
+// 状態ファイルを一覧に出すか。
+// PID は「生きていれば確実に実行中」という肯定材料としてのみ使う。フックの祖先を
+// 辿って得た PID は CLI の起動方法によって短命プロセスを指すことがあり、死亡していても
+// セッション終了とは限らない。死亡＝除外にすると実行中が一切出なくなる（実測済み）。
+fn should_show(status: &str, ts: u64, now: u64, pid_alive: bool) -> bool {
+    if pid_alive {
+        return true;
+    }
+    let stale_after = if status == "running" { RUNNING_STALE_SECS } else { WAITING_STALE_SECS };
+    now.saturating_sub(ts) <= stale_after
+}
+
 // ~/.claude/ztkn-state/*.json を読み、承認待ちセッション一覧を返す。
-// running: PID が生きていれば永続（ハートビート代わり）、死んでいたら除外。
-// waiting: PID がなければ ts で 15分スタールチェック（従来通り）。
+// 表示対象外まで古くなったファイルはここで削除する。フックは Stop でしか消さないため、
+// クラッシュや無効化中に終わったセッションの分が溜まり続けてしまう
+// （放置すると実際に数週間分残っていた）。生きているセッションのものは
+// 次のフック発火で書き直されるので、消しても実害はない。
 fn read_agent_alerts_list() -> Vec<serde_json::Value> {
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -372,16 +392,16 @@ fn read_agent_alerts_list() -> Vec<serde_json::Value> {
                     continue;
                 }
                 let Ok(txt) = std::fs::read_to_string(&p) else { continue };
-                let Ok(v) = serde_json::from_str::<serde_json::Value>(&txt) else { continue };
+                let Ok(v) = serde_json::from_str::<serde_json::Value>(&txt) else {
+                    let _ = std::fs::remove_file(&p); // 壊れていて読めないものも掃除する
+                    continue;
+                };
                 let ts = v["ts"].as_u64().unwrap_or(0);
                 let status = v["status"].as_str().unwrap_or("waiting");
                 let pid = v["pid"].as_u64().unwrap_or(0) as u32;
-                // running: PID ハートビートで生存確認。pid=0(旧フック)はtsフォールバック。
-                // waiting: ts で放置チェック（15分）。
-                if status == "running" && pid > 0 {
-                    if !is_pid_alive(pid) { continue; } // プロセス死亡＝セッション終了
-                } else if now.saturating_sub(ts) > 900 {
-                    continue; // 15分以上＝放置
+                if !should_show(status, ts, now, pid > 0 && is_pid_alive(pid)) {
+                    let _ = std::fs::remove_file(&p); // 期限切れ＝もう更新されないので消す
+                    continue;
                 }
                 // cwd はフルパス（非公開プロジェクト名やユーザー名を含む）なのでフロントへ渡さない。
                 // 表示に必要な末尾のフォルダ名だけを取り出す。
@@ -539,6 +559,37 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // 実行中/承認待ちの表示判定。PIDを「死亡＝除外」に使うと実行中が一切出なくなる
+    // （フックの祖先PIDは短命プロセスを指すため）ので、その退行を防ぐ。
+    #[test]
+    fn running_shows_even_when_recorded_pid_is_dead() {
+        let now = 1_000_000u64;
+        // 直近に記録された実行中。PIDが死んでいても出す
+        assert!(should_show("running", now - 10, now, false));
+        // 長時間のツール実行中（30分経過）でも消えない
+        assert!(should_show("running", now - 1800, now, false));
+        // 1時間を超えたら消す（クラッシュ放置の掃除）
+        assert!(!should_show("running", now - 3601, now, false));
+        // PIDが生きていれば時間に関係なく出す
+        assert!(should_show("running", now - 99999, now, true));
+    }
+
+    #[test]
+    fn waiting_is_cleaned_up_after_15min() {
+        let now = 1_000_000u64;
+        assert!(should_show("waiting", now - 60, now, false));
+        assert!(should_show("waiting", now - 899, now, false));
+        assert!(!should_show("waiting", now - 901, now, false));
+        // 承認待ちでもプロセスが生きていれば出す
+        assert!(should_show("waiting", now - 99999, now, true));
+    }
+
+    // ts が未来（時計のズレ）でも panic せず表示される
+    #[test]
+    fn future_timestamp_does_not_panic() {
+        assert!(should_show("running", 2_000_000, 1_000_000, false));
+    }
 
     #[test]
     fn save_then_load_roundtrips() {
