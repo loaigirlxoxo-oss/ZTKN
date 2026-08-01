@@ -4,6 +4,7 @@ use std::process::{Command, Stdio};
 use tauri::{AppHandle, Emitter, Manager};
 
 mod aihooks; // Claude/Codex のフック設定の導入・削除
+mod codexapp; // Codex アプリ(フック非対応)の実行中をセッション記録から検出
 mod usage; // AI使用量(プラン残量%・5h/7d枠)の取得
 
 // センサーサイドカー(.NET)の実行ファイルパスを解決する。
@@ -419,6 +420,25 @@ fn read_agent_alerts_list() -> Vec<serde_json::Value> {
                 }));
             }
         }
+    }
+    // Codex アプリはフックを実行しないため、セッション記録から実行中を拾って足す。
+    // フック経由(CLI)で既に同じセッションが入っていれば重複させない。
+    for t in codexapp::running_threads() {
+        if list.iter().any(|a| a["session_id"].as_str() == Some(t.session_id.as_str())) {
+            continue;
+        }
+        let folder = std::path::Path::new(t.cwd.trim_start_matches(r"\\?\"))
+            .file_name()
+            .and_then(|s| s.to_str())
+            .unwrap_or("")
+            .to_string();
+        list.push(serde_json::json!({
+            "session_id": t.session_id,
+            "folder": folder,
+            "since": t.since,
+            "provider": "codex",
+            "status": "running",
+        }));
     }
     list.sort_by(|a, b| a["folder"].as_str().unwrap_or("").cmp(b["folder"].as_str().unwrap_or("")));
     list
