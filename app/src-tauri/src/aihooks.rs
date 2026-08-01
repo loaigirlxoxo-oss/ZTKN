@@ -6,9 +6,8 @@
 //    toml_edit で該当テーブルだけ操作する
 //  - 書き込み前に既存ファイルを .ztkn-backup へ退避する（壊した時に戻せるように）
 //
-// フック実行ファイルは C:\ProgramData\ZTKN\ に配置する。インストール先
-// (C:\Program Files\ZTKN\) はパスにスペースを含み、Codex 側のコマンド文字列で
-// 引用符がどう解釈されるか仕様が公開されていないため、スペースの無い固定パスへ逃がす。
+// フック実行ファイルはアプリ本体の隣（配布時は書き込み保護された Program Files）を
+// そのまま指す。別の場所へコピーしない。詳細は hook_exe_path() のコメントを参照。
 
 use std::path::{Path, PathBuf};
 
@@ -16,9 +15,29 @@ use serde::Serialize;
 use serde_json::{json, Value};
 
 // フックが呼ばれるイベントと、ztkn-hook に渡す動作の対応。
-// UserPromptSubmit/PostToolUse=実行中, PermissionRequest=承認待ち, Stop=解除。
-const HOOK_EVENTS: [(&str, &str); 4] = [
+//
+// 実際の発火順は PreToolUse → PermissionRequest → PostToolUse / PostToolUseFailure。
+// PermissionRequest はユーザーにダイアログが出た時だけ発火する（自動承認では出ない）ので、
+// これが「本当に人間を待っている」状態を表す。
+//
+// 重要: ツールが失敗した時は PostToolUse ではなく PostToolUseFailure が発火する。
+// 承認を拒否した場合も PostToolUse は来ない。この2つを拾わないと waiting のまま固まり、
+// 動作中なのに「実行中0・承認待ち1」と両方が誤表示される（実測で確認）。
+// PreToolUse も running にすることで、拒否や失敗の後も次のツールで復帰する。
+const CLAUDE_EVENTS: [(&str, &str); 6] = [
+    ("UserPromptSubmit", "running"), // ターン開始
+    ("PreToolUse", "running"),       // ツール実行直前＝待ちではない
+    ("PermissionRequest", "wait"),   // ダイアログ表示中＝人間を待っている
+    ("PostToolUse", "running"),      // ツール成功
+    ("PostToolUseFailure", "running"), // ツール失敗（まだ動いている）
+    ("Stop", "clear"),               // ターン終了
+];
+
+// Codex は PostToolUseFailure を持たない（TUI の /hooks 一覧で確認）。
+// 知らないイベントを書くと --strict-config で弾かれるので、対応するものだけ書く。
+const CODEX_EVENTS: [(&str, &str); 5] = [
     ("UserPromptSubmit", "running"),
+    ("PreToolUse", "running"),
     ("PermissionRequest", "wait"),
     ("PostToolUse", "running"),
     ("Stop", "clear"),
@@ -35,16 +54,24 @@ pub struct AiHookStatus {
     pub codex_config: String,
     pub hook_exe: String,
     pub hook_exe_ready: bool, // 配置済みか
+    // Codex はフックのコマンド文字列のハッシュを [hooks.state] に持ち、変わると
+    // ユーザーが承認するまで実行しない（--dangerously-bypass-hook-trust の説明で確認）。
+    // 設定を書き換えた直後は必ず未承認になるので、UI から案内するために持たせる。
+    pub codex_needs_trust: bool,
 }
 
-// フック実行ファイルの配置先。スペースを含まない固定パスを使う。
-pub fn hook_exe_dest() -> PathBuf {
-    let base = std::env::var("ProgramData").unwrap_or_else(|_| r"C:\ProgramData".to_string());
-    PathBuf::from(base).join("ZTKN").join(HOOK_EXE_NAME)
-}
-
-// 配布時は exe の隣（resources）、dev では cargo の成果物を探す。
-fn hook_exe_source() -> Option<PathBuf> {
+// フック実行ファイルの場所。アプリ本体の隣に置かれたものをそのまま使う。
+//
+// 配布時: インストール先（既定 C:\Program Files\ZTKN\）。インストーラが resources として配置する。
+// 開発時: target/debug\ の cargo 成果物。どちらも app.exe の隣にある。
+//
+// 別の場所へコピーしない。特に C:\ProgramData\ は既定で一般ユーザーが書き込めるため、
+// そこへ実行ファイルを置くと差し替えによる権限昇格の踏み台になる。
+// 同種の問題は CVE-2026-35603 として AI コーディングツール各種で報告されており、
+// Anthropic は ProgramData を廃止して書き込み保護された Program Files へ移した。
+// パスにスペースが入るが、Claude(bash -c 経由) と Codex のどちらでも
+// 引用符なしで正しく実行されることを実測で確認済み。
+pub fn hook_exe_path() -> Option<PathBuf> {
     let mut candidates: Vec<PathBuf> = vec![];
     if let Ok(exe) = std::env::current_exe() {
         if let Some(dir) = exe.parent() {
@@ -52,10 +79,9 @@ fn hook_exe_source() -> Option<PathBuf> {
         }
     }
     if cfg!(debug_assertions) {
-        let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR")); // .../app/src-tauri
+        let d = PathBuf::from(env!("CARGO_MANIFEST_DIR")); // .../app/src-tauri
         candidates.push(d.join("target").join("debug").join(HOOK_EXE_NAME));
-        d.push("target");
-        candidates.push(d.join("release").join(HOOK_EXE_NAME));
+        candidates.push(d.join("target").join("release").join(HOOK_EXE_NAME));
     }
     candidates.into_iter().find(|p| p.is_file())
 }
@@ -163,7 +189,7 @@ fn write_claude_at(path: &Path, exe: &Path, enable: bool) -> Result<(), String> 
     if !hooks.is_object() {
         return Err("settings.json の hooks が想定の形式ではありません".into());
     }
-    for (event, action) in HOOK_EVENTS {
+    for (event, action) in CLAUDE_EVENTS {
         let list = hooks
             .as_object_mut()
             .unwrap()
@@ -192,7 +218,7 @@ fn claude_is_enabled() -> bool {
     let Ok(v) = serde_json::from_str::<Value>(&txt) else { return false };
     let Some(hooks) = v["hooks"].as_object() else { return false };
     // 4イベント全てに ZTKN エントリがあって初めて「有効」とみなす
-    HOOK_EVENTS.iter().all(|(event, _)| {
+    CLAUDE_EVENTS.iter().all(|(event, _)| {
         hooks
             .get(*event)
             .and_then(|l| l.as_array())
@@ -241,7 +267,7 @@ fn write_codex_at(path: &Path, exe: &Path, enable: bool) -> Result<(), String> {
         .as_table_mut()
         .ok_or("config.toml の hooks が想定の形式ではありません")?;
 
-    for (event, action) in HOOK_EVENTS {
+    for (event, action) in CODEX_EVENTS {
         // [[hooks.<Event>]] は配列テーブル。ZTKN 以外のエントリは残す。
         let mut kept = ArrayOfTables::new();
         if let Some(existing) = hooks.get(event).and_then(|i| i.as_array_of_tables()) {
@@ -296,7 +322,7 @@ fn codex_is_enabled() -> bool {
     let Ok(txt) = std::fs::read_to_string(&path) else { return false };
     let Ok(doc) = txt.parse::<toml_edit::DocumentMut>() else { return false };
     let Some(hooks) = doc.get("hooks").and_then(|i| i.as_table()) else { return false };
-    HOOK_EVENTS.iter().all(|(event, _)| {
+    CODEX_EVENTS.iter().all(|(event, _)| {
         hooks
             .get(*event)
             .and_then(|i| i.as_array_of_tables())
@@ -324,40 +350,23 @@ fn codex_is_enabled() -> bool {
 // ---- 公開API ----
 
 pub fn status() -> AiHookStatus {
-    let dest = hook_exe_dest();
+    let exe = hook_exe_path();
+    let codex_on = codex_is_enabled();
     AiHookStatus {
         claude_enabled: claude_is_enabled(),
-        codex_enabled: codex_is_enabled(),
+        codex_enabled: codex_on,
         claude_config: claude_settings_path().map(|p| p.to_string_lossy().to_string()).unwrap_or_default(),
         codex_config: codex_config_path().map(|p| p.to_string_lossy().to_string()).unwrap_or_default(),
-        hook_exe: dest.to_string_lossy().to_string(),
-        hook_exe_ready: dest.is_file(),
+        hook_exe: exe.as_ref().map(|p| p.to_string_lossy().to_string()).unwrap_or_default(),
+        hook_exe_ready: exe.is_some(),
+        codex_needs_trust: codex_on,
     }
-}
-
-// ztkn-hook.exe を ProgramData へ配置する（更新時も上書きして最新にする）。
-fn install_hook_exe() -> Result<PathBuf, String> {
-    let src = hook_exe_source().ok_or(
-        "ztkn-hook.exe が見つかりません（開発時は `cargo build -p ztkn-hook` が必要です）",
-    )?;
-    let dest = hook_exe_dest();
-    if let Some(dir) = dest.parent() {
-        std::fs::create_dir_all(dir).map_err(|e| format!("{} の作成に失敗: {e}", dir.display()))?;
-    }
-    // 実行中に上書きできないことがあるので、同一内容ならコピーを省く
-    let same = std::fs::metadata(&src)
-        .ok()
-        .zip(std::fs::metadata(&dest).ok())
-        .map(|(a, b)| a.len() == b.len())
-        .unwrap_or(false);
-    if !same {
-        std::fs::copy(&src, &dest).map_err(|e| format!("{} へのコピーに失敗: {e}", dest.display()))?;
-    }
-    Ok(dest)
 }
 
 pub fn enable() -> Result<AiHookStatus, String> {
-    let exe = install_hook_exe()?;
+    let exe = hook_exe_path().ok_or(
+        "ztkn-hook.exe が見つかりません（開発時は `cargo build -p ztkn-hook` が必要です）",
+    )?;
     // 前回の無効化中に取り残された状態があれば消してから始める。
     // 生きているセッションは次のフック発火で書き直されるので実害はない。
     clear_all_state();
@@ -394,17 +403,12 @@ pub fn clear_all_state() -> usize {
 }
 
 pub fn disable() -> Result<AiHookStatus, String> {
-    let exe = hook_exe_dest();
+    // 実行ファイルはアプリ本体の同梱物なので消さない（消すとアプリが壊れる）。
+    // 起動中の CLI が設定をキャッシュしている場合、そのセッションが終わるまでは
+    // フックが呼ばれ続けて状態ファイルが再生成されることがある。CLI を再起動すれば止まる。
+    let exe = hook_exe_path().unwrap_or_default();
     let c = write_claude(&exe, false);
     let x = write_codex(&exe, false);
-    // 起動中の CLI が設定をキャッシュしていると、設定から消してもフックが呼ばれ続ける。
-    // 実行ファイルごと消せば呼ばれても何も起きない（フック側はエラーでも CLI を止めない）。
-    // 有効化し直す時に enable() が置き直すので、消して困ることはない。
-    if exe.is_file() {
-        if let Err(e) = std::fs::remove_file(&exe) {
-            eprintln!("[aihooks] {} を消せませんでした: {e}", exe.display());
-        }
-    }
     // フックを外した以上、残った状態は更新されない。表示を即座に止めるため消す。
     let n = clear_all_state();
     if n > 0 {
@@ -467,7 +471,7 @@ mod tests {
         // write_claude の中核と同じ手順を再現（ファイルI/Oを挟まず検証する）
         let exe = Path::new(r"C:\ProgramData\ZTKN\ztkn-hook.exe");
         let hooks = root.as_object_mut().unwrap().get_mut("hooks").unwrap();
-        for (event, action) in HOOK_EVENTS {
+        for (event, action) in CLAUDE_EVENTS {
             let list = hooks.as_object_mut().unwrap().entry(event).or_insert_with(|| json!([]));
             let arr = list.as_array_mut().unwrap();
             arr.retain(|e| !is_ztkn_entry(e));
@@ -479,12 +483,17 @@ mod tests {
             .as_str()
             .unwrap()
             .contains("security-check")));
-        // PreToolUse(ZTKNが使わないイベント)は素通し
-        assert_eq!(root["hooks"]["PreToolUse"].as_array().unwrap().len(), 1);
+        // PreToolUse は ZTKN も使うイベント。利用者のフックを残したまま1件足される
+        let pre = root["hooks"]["PreToolUse"].as_array().unwrap();
+        assert_eq!(pre.len(), 2, "利用者のフック1件 + ZTKN1件のはず");
+        assert!(
+            pre.iter().any(|e| e["hooks"][0]["command"].as_str().unwrap().contains("lint")),
+            "利用者のPreToolUseフックが消えた"
+        );
         // 他の設定項目も無傷
         assert_eq!(root["model"].as_str().unwrap(), "opus");
-        // ZTKN分が4イベントに入っていること
-        for (event, _) in HOOK_EVENTS {
+        // ZTKN分が全イベントに入っていること
+        for (event, _) in CLAUDE_EVENTS {
             assert!(root["hooks"][event].as_array().unwrap().iter().any(is_ztkn_entry), "{event}");
         }
     }
@@ -526,12 +535,13 @@ mod tests {
         write_claude_at(&path, exe, true).unwrap();
         write_claude_at(&path, exe, true).unwrap();
         let v: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
-        for (event, _) in HOOK_EVENTS {
+        for (event, _) in CLAUDE_EVENTS {
             let n = v["hooks"][event].as_array().unwrap().iter().filter(|e| is_ztkn_entry(e)).count();
             assert_eq!(n, 1, "{event} のZTKNエントリが{n}件");
         }
-        // 他人のフックが健在
-        assert_eq!(v["hooks"]["PreToolUse"].as_array().unwrap().len(), 1);
+        // 他人のフックが健在（ZTKN分が足されるので件数は増える）
+        assert!(v["hooks"]["PreToolUse"].as_array().unwrap().iter()
+            .any(|e| e["hooks"][0]["command"].as_str().unwrap().contains("secret-scan")));
         assert!(v["hooks"]["PostToolUse"].as_array().unwrap().iter()
             .any(|e| e["hooks"][0]["command"].as_str().unwrap().contains("notify")));
         assert!(v["hooks"]["Stop"].as_array().unwrap().iter()
@@ -570,12 +580,20 @@ command = "my-own-hook"
         write_codex_at(&path, exe, true).unwrap();
         write_codex_at(&path, exe, true).unwrap();
         let txt = std::fs::read_to_string(&path).unwrap();
-        // ZTKN分が4イベント、各1件
-        for (event, action) in HOOK_EVENTS {
+        // Codex 用の全イベントが入っていること
+        for (event, action) in CODEX_EVENTS {
             let n = txt.matches(&format!("{action} codex")).count();
             assert!(n >= 1, "{event}({action}) が入っていない");
         }
-        assert_eq!(txt.matches("ztkn-hook.exe running codex").count(), 4, "running が重複/不足"); // posix+windows × 2イベント
+        // running のイベント数 × (command + command_windows の2行)
+        let running_events = CODEX_EVENTS.iter().filter(|(_, a)| *a == "running").count();
+        assert_eq!(
+            txt.matches("ztkn-hook.exe running codex").count(),
+            running_events * 2,
+            "running が重複/不足"
+        );
+        // Codex に存在しないイベントを書いていないこと（--strict-config で弾かれる）
+        assert!(!txt.contains("PostToolUseFailure"), "Codexに無いイベントを書いている");
         // 手書きの内容が残っている
         assert!(txt.contains("# 利用者が手で書いた設定"), "コメントが消えた");
         assert!(txt.contains("gpt-5.6-sol"), "他の設定が消えた");
@@ -709,7 +727,7 @@ command = "my-own-hook"
         write_codex_at(&xp, exe, true).unwrap();
 
         assert_eq!(foreign_of(&cp), before_c, "enableで他人のClaudeフックが変化した");
-        for (event, _) in HOOK_EVENTS {
+        for (event, _) in CLAUDE_EVENTS {
             let v: Value = serde_json::from_str(&std::fs::read_to_string(&cp).unwrap()).unwrap();
             let n = v["hooks"][event].as_array().unwrap().iter().filter(|e| is_ztkn_entry(e)).count();
             assert_eq!(n, 1, "{event} が {n} 件");

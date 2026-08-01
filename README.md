@@ -109,48 +109,69 @@ Claude Code / Codex CLI の状態をサブモニタに出せます。値は**す
 
 ツールバーの **「AI連携」チェックボックス** を入れると、Claude Code と Codex CLI の設定ファイルにフックが書き込まれます。外すと元に戻ります。ZTKN 側では「実行中 / 承認待ち」センサー（Claude / Codex グループ）や部品「**⚠ 承認待ち一覧**」を配置してください（内蔵の **Default テンプレ**には既に入っています）。
 
+**有効化した後に必要な操作:**
+
+| CLI | 操作 |
+|-|-|
+| Claude Code | 再起動（設定を起動時に読むため） |
+| **Codex CLI** | **TUI で `/hooks` を打ち、ZTKN のフックを承認する** |
+
+Codex はフックのコマンド文字列のハッシュを `config.toml` の `[hooks.state]` に保存しており、
+内容が変わると**承認するまで実行しません**（設定を書き換えただけで任意のコマンドが走らないようにする仕組み）。
+ZTKN はこの仕組みを迂回しません。承認は Codex 側で行ってください。
+
 #### 何が書き込まれるか
 
 他人の設定ファイルを触る機能なので、内容を明示します。**既存のフックや設定には一切変更を加えません。**
 書き換える前に元ファイルを `<元の名前>.ztkn-backup` として同じ場所に退避します。
 
-**1. フック実行ファイルの配置**
+**1. フック実行ファイル**
 
-```
-C:\ProgramData\ZTKN\ztkn-hook.exe   ← インストーラ同梱のものをコピー
-```
+インストール先（既定 `C:\Program Files\ZTKN\ztkn-hook.exe`）のものをそのまま使います。**コピーは行いません。**
 
-インストール先（`C:\Program Files\ZTKN\`）ではなくここに置くのは、パスにスペースが含まれると
-Codex 側のコマンド文字列で正しく解釈されない可能性があるためです。
+`C:\ProgramData\` に置く方式は採りません。ここは既定で一般ユーザーが書き込めるため、
+実行ファイルを差し替えられると、他のユーザーが Claude/Codex を起動するたびに
+その権限で任意コードが実行されます。同種の問題は
+[CVE-2026-35603](https://cymulate.com/blog/cve-2026-35603-ai-coding-tools-privilege-escalation/)
+として AI コーディングツール各種で報告されており、Anthropic は ProgramData を廃止して
+書き込み保護された Program Files へ移しています。ZTKN も同じ方針です。
 
 **2. `~/.claude/settings.json`**（環境変数 `CLAUDE_CONFIG_DIR` があればそちら）
 
-`hooks` の下の4イベントに、それぞれ次の形のエントリを1つ追加します。
+`hooks` の下の各イベントに、それぞれ次の形のエントリを1つ追加します。
 
 ```json
-{ "hooks": [{ "type": "command", "command": "bash -c '/c/ProgramData/ZTKN/ztkn-hook.exe running'" }] }
+{ "hooks": [{ "type": "command", "command": "bash -c '/c/Program Files/ZTKN/ztkn-hook.exe running'" }] }
 ```
 
 | イベント | 引数 | 意味 |
 |-|-|-|
-| `UserPromptSubmit` | `running` | ターン開始＝実行中 |
-| `PermissionRequest` | `wait` | 承認待ち |
-| `PostToolUse` | `running` | 承認後は実行中へ戻す |
+| `UserPromptSubmit` | `running` | ターン開始 |
+| `PreToolUse` | `running` | ツール実行直前＝待ちではない |
+| `PermissionRequest` | `wait` | **承認ダイアログ表示中＝人間を待っている** |
+| `PostToolUse` | `running` | ツール成功 |
+| `PostToolUseFailure` | `running` | ツール失敗（まだ動いている） |
 | `Stop` | `clear` | ターン終了＝解除 |
+
+`PostToolUseFailure` と `PreToolUse` を含めているのは、**ツールが失敗したり承認を拒否した場合に
+`PostToolUse` が発火しない**ためです。これらを拾わないと「承認待ち」のまま固まり、
+動作中なのに実行中0・承認待ち1と両方が誤表示されます。
 
 Claude Code は Windows でもフックを bash 経由で実行するため、Git Bash 形式のパス（`/c/...`）を使います。
 
 **3. `~/.codex/config.toml`**（環境変数 `CODEX_HOME` があればそちら）
 
-同じ4イベントに次を追加します。Windows では `command_windows` が使われます（指定しないと WSL 経由になる）。
+同じイベントに次を追加します。Windows では `command_windows` が使われます（指定しないと WSL 経由になる）。
 
 ```toml
 [[hooks.PermissionRequest]]
 [[hooks.PermissionRequest.hooks]]
 type = "command"
-command = '/c/ProgramData/ZTKN/ztkn-hook.exe wait codex'
-command_windows = 'C:\ProgramData\ZTKN\ztkn-hook.exe wait codex'
+command = '/c/Program Files/ZTKN/ztkn-hook.exe wait codex'
+command_windows = 'C:\Program Files\ZTKN\ztkn-hook.exe wait codex'
 ```
+
+Codex には `PostToolUseFailure` が無いため、Codex 側は残り5イベントのみ設定します。
 
 第2引数の `codex` は、Claude と同じ実行ファイルを共用しつつ表示を分けるためのものです。
 Codex TUI で `/hooks` を打つと有効化状態（Installed/Active）を確認できます。
