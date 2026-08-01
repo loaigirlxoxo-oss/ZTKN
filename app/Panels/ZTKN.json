@@ -1,0 +1,930 @@
+{
+  "size": {
+    "x": 0,
+    "y": 0,
+    "w": 1920,
+    "h": 480
+  },
+  "items": [
+    {
+      "id": "item_44_325633699",
+      "kind": "Label",
+      "rect": {
+        "x": 511,
+        "y": 194,
+        "w": 188,
+        "h": 33
+      },
+      "z": 7,
+      "rotation": 12,
+      "opacity": 1,
+      "style": {
+        "fontFamily": "夜永オールド明朝 Bold",
+        "fontSize": 33,
+        "fontWeight": "bold",
+        "color": "#eceac1",
+        "align": "left"
+      },
+      "format": "CPU TEMP.",
+      "anchorX": 511,
+      "anchorY": 210.5
+    },
+    {
+      "id": "item_45_325633699",
+      "kind": "SensorText",
+      "rect": {
+        "x": 525,
+        "y": 254,
+        "w": 139,
+        "h": 55
+      },
+      "z": 2,
+      "rotation": 12,
+      "opacity": 1,
+      "style": {
+        "fontFamily": "夜永オールド明朝 Bold",
+        "fontSize": 49,
+        "fontWeight": "bold",
+        "color": "#000000",
+        "align": "left",
+        "strokeWidth": 2.5,
+        "strokeColor": "#ffffff"
+      },
+      "format": "%d℃",
+      "sensorSrc": "Intel Core Ultra 7 265K|CPU Package|Temperature",
+      "anchorX": 525,
+      "anchorY": 281.5
+    },
+    {
+      "id": "item_47_325633799",
+      "kind": "Gauge",
+      "rect": {
+        "x": 478,
+        "y": 178,
+        "w": 233,
+        "h": 161
+      },
+      "z": 0,
+      "rotation": 12,
+      "opacity": 1,
+      "style": {
+        "fontFamily": "Bahnschrift",
+        "fontSize": 18,
+        "fontWeight": "normal",
+        "color": "#00ffcc",
+        "align": "left"
+      },
+      "range": [
+        40,
+        100
+      ],
+      "gauge": {
+        "mode": "StateFrames",
+        "frames": [
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/scenes/H-heat/state-01.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/scenes/H-heat/state-02.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/scenes/H-heat/state-03.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/scenes/H-heat/state-04.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/scenes/H-heat/state-05.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/scenes/H-heat/state-06.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/scenes/H-heat/state-07.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/scenes/H-heat/state-08.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/scenes/H-heat/state-09.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/scenes/H-heat/state-10.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/scenes/H-heat/state-11.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/scenes/H-heat/state-12.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/scenes/H-heat/state-13.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/scenes/H-heat/state-14.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/scenes/H-heat/state-15.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/scenes/H-heat/state-16.png"
+        ]
+      },
+      "format": "%d",
+      "bgColor": "#222222",
+      "bgOpacity": 0,
+      "frameColor": "#333333",
+      "frameOpacity": 0,
+      "sensorSrc": "Intel Core Ultra 7 265K|CPU Total|Load",
+      "useGradient": false,
+      "gradColor": "#000000"
+    },
+    {
+      "id": "item_48_325633799",
+      "kind": "SensorText",
+      "rect": {
+        "x": 225,
+        "y": 164,
+        "w": 85,
+        "h": 79
+      },
+      "z": 9,
+      "rotation": -6,
+      "opacity": 1,
+      "style": {
+        "fontFamily": "Plastique",
+        "fontSize": 52,
+        "fontWeight": "bold",
+        "color": "#050505",
+        "align": "right"
+      },
+      "format": "%d%",
+      "sensorSrc": "Intel Core Ultra 7 265K|CPU Total|Load",
+      "anchorX": 310,
+      "anchorY": 203.5
+    },
+    {
+      "id": "item_50_325633799",
+      "kind": "Label",
+      "rect": {
+        "x": 1046,
+        "y": 277,
+        "w": 80,
+        "h": 64
+      },
+      "z": 11,
+      "rotation": -12,
+      "opacity": 1,
+      "style": {
+        "fontFamily": "x12y16pxMaruMonica",
+        "fontSize": 64,
+        "fontWeight": "normal",
+        "color": "#02c519",
+        "align": "left",
+        "strokeWidth": 2.5
+      },
+      "format": "GPU",
+      "anchorX": 1046,
+      "anchorY": 309
+    },
+    {
+      "id": "item_51_325633799",
+      "kind": "SensorText",
+      "rect": {
+        "x": 1270,
+        "y": 377,
+        "w": 240,
+        "h": 94
+      },
+      "z": 0,
+      "rotation": 17,
+      "opacity": 1,
+      "style": {
+        "fontFamily": "源界明朝",
+        "fontSize": 84,
+        "fontWeight": "bold",
+        "color": "#000000",
+        "align": "left"
+      },
+      "format": "%d℃",
+      "sensorSrc": "NVIDIA GeForce RTX 5080|GPU Core|Temperature",
+      "anchorX": 1270,
+      "anchorY": 424
+    },
+    {
+      "id": "item_53_325633799",
+      "kind": "Gauge",
+      "rect": {
+        "x": 1009,
+        "y": 142,
+        "w": 483,
+        "h": 193
+      },
+      "z": 0,
+      "rotation": -11,
+      "opacity": 1,
+      "style": {
+        "fontFamily": "Bahnschrift",
+        "fontSize": 18,
+        "fontWeight": "normal",
+        "color": "#00ffcc",
+        "align": "left"
+      },
+      "range": [
+        0,
+        100
+      ],
+      "gauge": {
+        "mode": "StateFrames",
+        "frames": [
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/scenes/C-city/state-01.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/scenes/C-city/state-02.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/scenes/C-city/state-03.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/scenes/C-city/state-04.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/scenes/C-city/state-05.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/scenes/C-city/state-06.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/scenes/C-city/state-07.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/scenes/C-city/state-08.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/scenes/C-city/state-09.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/scenes/C-city/state-10.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/scenes/C-city/state-11.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/scenes/C-city/state-12.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/scenes/C-city/state-13.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/scenes/C-city/state-14.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/scenes/C-city/state-15.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/scenes/C-city/state-16.png"
+        ]
+      },
+      "format": "%d",
+      "bgColor": "#222222",
+      "bgOpacity": 0,
+      "frameColor": "#333333",
+      "frameOpacity": 0,
+      "sensorSrc": "NVIDIA GeForce RTX 5080|GPU Core|Load",
+      "useGradient": false,
+      "gradColor": "#000000"
+    },
+    {
+      "id": "item_54_325633799",
+      "kind": "SensorText",
+      "rect": {
+        "x": 1261,
+        "y": 145,
+        "w": 198,
+        "h": 99
+      },
+      "z": 0,
+      "rotation": -11,
+      "opacity": 1,
+      "style": {
+        "fontFamily": "x12y16pxMaruMonica",
+        "fontSize": 77,
+        "fontWeight": "bold",
+        "color": "#02c519",
+        "align": "right",
+        "strokeWidth": 2
+      },
+      "format": "%d%",
+      "sensorSrc": "NVIDIA GeForce RTX 5080|GPU Core|Load",
+      "anchorX": 1459,
+      "anchorY": 194.5
+    },
+    {
+      "id": "item_55_325633799",
+      "kind": "DateTime",
+      "rect": {
+        "x": 238,
+        "y": 41,
+        "w": 659,
+        "h": 128
+      },
+      "z": 0,
+      "rotation": -10,
+      "opacity": 1,
+      "style": {
+        "fontFamily": "Veteran Typewriter",
+        "fontSize": 102,
+        "fontWeight": "bold",
+        "color": "#eee8d6",
+        "align": "right"
+      },
+      "format": "HH:mm:ss",
+      "anchorX": 897,
+      "anchorY": 105
+    },
+    {
+      "id": "item_56_325633799",
+      "kind": "Box",
+      "rect": {
+        "x": 477,
+        "y": 358,
+        "w": 560,
+        "h": 116
+      },
+      "z": 0,
+      "rotation": 0,
+      "opacity": 1,
+      "style": {
+        "fontFamily": "Bahnschrift",
+        "fontSize": 18,
+        "fontWeight": "normal",
+        "color": "#00ffcc",
+        "align": "left"
+      },
+      "bgColor": "#050608",
+      "bgOpacity": 0.62,
+      "frameColor": "#00d2c4",
+      "frameOpacity": 0.3,
+      "borderWidth": 1,
+      "cornerRadius": 8
+    },
+    {
+      "id": "item_57_325633799",
+      "kind": "Label",
+      "rect": {
+        "x": 499,
+        "y": 369,
+        "w": 122,
+        "h": 15
+      },
+      "z": 0,
+      "rotation": 0,
+      "opacity": 1,
+      "style": {
+        "fontFamily": "Bahnschrift",
+        "fontSize": 15,
+        "fontWeight": "bold",
+        "color": "#00d2c4",
+        "align": "left"
+      },
+      "format": "NETWORK  ↓ / ↑",
+      "anchorX": 499,
+      "anchorY": 376.5
+    },
+    {
+      "id": "item_58_325633799",
+      "kind": "GraphLine",
+      "rect": {
+        "x": 499,
+        "y": 390,
+        "w": 516,
+        "h": 68
+      },
+      "z": 0,
+      "rotation": 0,
+      "opacity": 1,
+      "style": {
+        "fontFamily": "Bahnschrift",
+        "fontSize": 18,
+        "fontWeight": "normal",
+        "color": "#00d2c4",
+        "align": "left"
+      },
+      "unit": "bps",
+      "autoUnit": true,
+      "showScale": true,
+      "bgColor": "#0d0d0d",
+      "bgOpacity": 0,
+      "frameColor": "#333333",
+      "frameOpacity": 1,
+      "valueScale": 8,
+      "graphStyle": "dual-basic",
+      "color2": "#ff3484",
+      "sensorSrc": "イーサネット|Download Speed|Throughput",
+      "sensorSrc2": "イーサネット|Upload Speed|Throughput",
+      "lineGradient": false
+    },
+    {
+      "id": "item_59_325633799",
+      "kind": "Label",
+      "rect": {
+        "x": 1135,
+        "y": 14,
+        "w": 168,
+        "h": 51
+      },
+      "z": 14,
+      "rotation": -22,
+      "opacity": 1,
+      "style": {
+        "fontFamily": "瀞ノグリッチ明朝 H4",
+        "fontSize": 51,
+        "fontWeight": "bold",
+        "color": "#e10e0e",
+        "align": "left"
+      },
+      "format": "VRAM",
+      "anchorX": 1135,
+      "anchorY": 39.5
+    },
+    {
+      "id": "item_60_325633799",
+      "kind": "SensorText",
+      "rect": {
+        "x": 1449,
+        "y": 64,
+        "w": 139,
+        "h": 104
+      },
+      "z": 15,
+      "rotation": -2,
+      "opacity": 1,
+      "style": {
+        "fontFamily": "a dripping marker",
+        "fontSize": 58,
+        "fontWeight": "bold",
+        "color": "#050505",
+        "align": "left"
+      },
+      "format": "%d%",
+      "sensorSrc": "NVIDIA GeForce RTX 5080|GPU Memory|Load",
+      "anchorX": 1449,
+      "anchorY": 116
+    },
+    {
+      "id": "item_63_325633799",
+      "kind": "Label",
+      "rect": {
+        "x": 0,
+        "y": 339,
+        "w": 171,
+        "h": 67
+      },
+      "z": 12,
+      "rotation": -29,
+      "opacity": 1,
+      "style": {
+        "fontFamily": "源界明朝",
+        "fontSize": 67,
+        "fontWeight": "normal",
+        "color": "#e10e0e",
+        "align": "left"
+      },
+      "format": "RAM",
+      "anchorX": 0,
+      "anchorY": 372.5
+    },
+    {
+      "id": "item_64_325633799",
+      "kind": "SensorText",
+      "rect": {
+        "x": 310,
+        "y": 359,
+        "w": 127,
+        "h": 68
+      },
+      "z": 5,
+      "rotation": -6,
+      "opacity": 1,
+      "style": {
+        "fontFamily": "源界明朝",
+        "fontSize": 54,
+        "fontWeight": "bold",
+        "color": "#f50000",
+        "align": "left",
+        "strokeWidth": 0
+      },
+      "format": "%d％",
+      "sensorSrc": "Total Memory|Memory|Load",
+      "anchorX": 310,
+      "anchorY": 393
+    },
+    {
+      "id": "item_65_325633799",
+      "kind": "Label",
+      "rect": {
+        "x": 556,
+        "y": 451,
+        "w": 11,
+        "h": 16
+      },
+      "z": 0,
+      "rotation": 0,
+      "opacity": 1,
+      "style": {
+        "fontFamily": "Bahnschrift",
+        "fontSize": 16,
+        "fontWeight": "normal",
+        "color": "#8aa0a2",
+        "align": "left"
+      },
+      "format": "%",
+      "anchorX": 556,
+      "anchorY": 459
+    },
+    {
+      "id": "item_66_325633799",
+      "kind": "Gauge",
+      "rect": {
+        "x": 81,
+        "y": 339,
+        "w": 383,
+        "h": 119
+      },
+      "z": 0,
+      "rotation": 6,
+      "opacity": 1,
+      "style": {
+        "fontFamily": "Bahnschrift",
+        "fontSize": 18,
+        "fontWeight": "normal",
+        "color": "#00ffcc",
+        "align": "left"
+      },
+      "range": [
+        0,
+        100
+      ],
+      "gauge": {
+        "mode": "StateFrames",
+        "frames": [
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/barcode/teal/state-01.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/barcode/teal/state-02.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/barcode/teal/state-03.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/barcode/teal/state-04.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/barcode/teal/state-05.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/barcode/teal/state-06.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/barcode/teal/state-07.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/barcode/teal/state-08.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/barcode/teal/state-09.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/barcode/teal/state-10.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/barcode/teal/state-11.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/barcode/teal/state-12.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/barcode/teal/state-13.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/barcode/teal/state-14.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/barcode/teal/state-15.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/barcode/teal/state-16.png"
+        ]
+      },
+      "format": "%d",
+      "bgColor": "#222222",
+      "bgOpacity": 0,
+      "frameColor": "#333333",
+      "frameOpacity": 0,
+      "sensorSrc": "Total Memory|Memory|Load",
+      "useGradient": false,
+      "gradColor": "#000000"
+    },
+    {
+      "id": "item_69_1921119699",
+      "kind": "Image",
+      "rect": {
+        "x": 82,
+        "y": 105,
+        "w": 390,
+        "h": 186
+      },
+      "z": 0,
+      "rotation": -6,
+      "opacity": 1,
+      "style": {
+        "fontFamily": "sans-serif",
+        "fontSize": 18,
+        "fontWeight": "normal",
+        "color": "#00ffcc",
+        "align": "left"
+      },
+      "asset": "assets:aida64-skin-release-full/Frames/frame-01-torn.png"
+    },
+    {
+      "id": "item_70_4978482400",
+      "kind": "Gauge",
+      "rect": {
+        "x": 1183,
+        "y": -3,
+        "w": 259,
+        "h": 193
+      },
+      "z": -2,
+      "rotation": 6,
+      "opacity": 1,
+      "style": {
+        "fontFamily": "sans-serif",
+        "fontSize": 18,
+        "fontWeight": "normal",
+        "color": "#00ffcc",
+        "align": "left"
+      },
+      "range": [
+        0,
+        100
+      ],
+      "gauge": {
+        "mode": "StateFrames",
+        "frames": [
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/scenes/D-docs/state-01.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/scenes/D-docs/state-02.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/scenes/D-docs/state-03.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/scenes/D-docs/state-04.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/scenes/D-docs/state-05.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/scenes/D-docs/state-06.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/scenes/D-docs/state-07.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/scenes/D-docs/state-08.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/scenes/D-docs/state-09.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/scenes/D-docs/state-10.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/scenes/D-docs/state-11.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/scenes/D-docs/state-12.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/scenes/D-docs/state-13.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/scenes/D-docs/state-14.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/scenes/D-docs/state-15.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/scenes/D-docs/state-16.png"
+        ]
+      },
+      "format": "%d",
+      "bgColor": "#222222",
+      "bgOpacity": 1,
+      "frameColor": "#333333",
+      "frameOpacity": 1,
+      "useGradient": false,
+      "gradColor": "#000000",
+      "sensorSrc": "NVIDIA GeForce RTX 5080|GPU Memory|Load"
+    },
+    {
+      "id": "item_71_7926327299",
+      "kind": "Label",
+      "rect": {
+        "x": 129,
+        "y": 177,
+        "w": 131,
+        "h": 46
+      },
+      "z": 0,
+      "rotation": -9,
+      "opacity": 1,
+      "style": {
+        "fontFamily": "Plastique",
+        "fontSize": 46,
+        "fontWeight": "normal",
+        "color": "#000000",
+        "align": "left"
+      },
+      "format": "CPU",
+      "anchorX": 129,
+      "anchorY": 200
+    },
+    {
+      "id": "item_72_9232593000",
+      "kind": "Image",
+      "rect": {
+        "x": 1391,
+        "y": 28,
+        "w": 238,
+        "h": 117
+      },
+      "z": 0,
+      "rotation": -5,
+      "opacity": 1,
+      "style": {
+        "fontFamily": "sans-serif",
+        "fontSize": 18,
+        "fontWeight": "normal",
+        "color": "#00ffcc",
+        "align": "left"
+      },
+      "asset": "assets:aida64-skin-release-full/Frames/frame-02-tape.png"
+    },
+    {
+      "id": "item_43_33963199",
+      "kind": "Gauge",
+      "rect": {
+        "x": 1588,
+        "y": 154,
+        "w": 443,
+        "h": 310
+      },
+      "z": 0,
+      "rotation": 11,
+      "opacity": 1,
+      "style": {
+        "fontFamily": "sans-serif",
+        "fontSize": 18,
+        "fontWeight": "normal",
+        "color": "#00ffcc",
+        "align": "left"
+      },
+      "range": [
+        0,
+        100
+      ],
+      "gauge": {
+        "mode": "StateFrames",
+        "frames": [
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/scenes/I-juice-pink/state-01.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/scenes/I-juice-pink/state-02.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/scenes/I-juice-pink/state-03.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/scenes/I-juice-pink/state-04.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/scenes/I-juice-pink/state-05.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/scenes/I-juice-pink/state-06.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/scenes/I-juice-pink/state-07.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/scenes/I-juice-pink/state-08.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/scenes/I-juice-pink/state-09.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/scenes/I-juice-pink/state-10.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/scenes/I-juice-pink/state-11.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/scenes/I-juice-pink/state-12.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/scenes/I-juice-pink/state-13.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/scenes/I-juice-pink/state-14.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/scenes/I-juice-pink/state-15.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/scenes/I-juice-pink/state-16.png"
+        ]
+      },
+      "format": "%d",
+      "bgColor": "#222222",
+      "bgOpacity": 1,
+      "frameColor": "#333333",
+      "frameOpacity": 1,
+      "useGradient": false,
+      "gradColor": "#000000"
+    },
+    {
+      "id": "item_44_169517099",
+      "kind": "Gauge",
+      "rect": {
+        "x": 1510,
+        "y": 261,
+        "w": 291,
+        "h": 210
+      },
+      "z": 0,
+      "rotation": -20,
+      "opacity": 1,
+      "style": {
+        "fontFamily": "sans-serif",
+        "fontSize": 18,
+        "fontWeight": "normal",
+        "color": "#00ffcc",
+        "align": "left"
+      },
+      "range": [
+        0,
+        100
+      ],
+      "gauge": {
+        "mode": "StateFrames",
+        "frames": [
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/scenes/I-juice-blue/state-01.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/scenes/I-juice-blue/state-02.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/scenes/I-juice-blue/state-03.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/scenes/I-juice-blue/state-04.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/scenes/I-juice-blue/state-05.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/scenes/I-juice-blue/state-06.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/scenes/I-juice-blue/state-07.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/scenes/I-juice-blue/state-08.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/scenes/I-juice-blue/state-09.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/scenes/I-juice-blue/state-10.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/scenes/I-juice-blue/state-11.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/scenes/I-juice-blue/state-12.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/scenes/I-juice-blue/state-13.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/scenes/I-juice-blue/state-14.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/scenes/I-juice-blue/state-15.png",
+          "assets:aida64-skin-release-full/custom-gauges-horizontal/scenes/I-juice-blue/state-16.png"
+        ]
+      },
+      "format": "%d",
+      "bgColor": "#222222",
+      "bgOpacity": 1,
+      "frameColor": "#333333",
+      "frameOpacity": 1,
+      "useGradient": false,
+      "gradColor": "#000000"
+    },
+    {
+      "id": "item_45_455269000",
+      "kind": "Image",
+      "rect": {
+        "x": 1061,
+        "y": 300,
+        "w": 524,
+        "h": 213
+      },
+      "z": -5,
+      "rotation": -168,
+      "opacity": 1,
+      "style": {
+        "fontFamily": "sans-serif",
+        "fontSize": 18,
+        "fontWeight": "normal",
+        "color": "#00ffcc",
+        "align": "left"
+      },
+      "asset": "assets:aida64-skin-release-full/Frames/frame-01-torn.png"
+    },
+    {
+      "id": "item_46_563083000",
+      "kind": "Label",
+      "rect": {
+        "x": 1140,
+        "y": 324,
+        "w": 131,
+        "h": 57
+      },
+      "z": 0,
+      "rotation": 8,
+      "opacity": 1,
+      "style": {
+        "fontFamily": "源界明朝",
+        "fontSize": 57,
+        "fontWeight": "normal",
+        "color": "#000000",
+        "align": "left"
+      },
+      "format": "GPU",
+      "anchorX": 1140,
+      "anchorY": 352.5
+    },
+    {
+      "id": "dup_1_627914",
+      "kind": "Label",
+      "rect": {
+        "x": 1140,
+        "y": 377,
+        "w": 192,
+        "h": 57
+      },
+      "z": 0,
+      "rotation": 8,
+      "opacity": 1,
+      "style": {
+        "fontFamily": "源界明朝",
+        "fontSize": 57,
+        "fontWeight": "normal",
+        "color": "#000000",
+        "align": "left"
+      },
+      "format": "Temp.",
+      "anchorX": 1140,
+      "anchorY": 405.5
+    },
+    {
+      "id": "item_47_5356693199",
+      "kind": "Label",
+      "rect": {
+        "x": 1743,
+        "y": 360,
+        "w": 117,
+        "h": 33
+      },
+      "z": 0,
+      "rotation": -59,
+      "opacity": 1,
+      "style": {
+        "fontFamily": "Shippori Mincho ExtraBold",
+        "fontSize": 33,
+        "fontWeight": "normal",
+        "color": "#fa7000",
+        "align": "left",
+        "strokeColor": "#ffffff",
+        "strokeWidth": 1
+      },
+      "format": "Claude",
+      "anchorX": 1743,
+      "anchorY": 376.5
+    },
+    {
+      "id": "dup_2_5560420",
+      "kind": "Label",
+      "rect": {
+        "x": 1620,
+        "y": 394,
+        "w": 104,
+        "h": 33
+      },
+      "z": 0,
+      "rotation": -90,
+      "opacity": 1,
+      "style": {
+        "fontFamily": "Shippori Mincho ExtraBold",
+        "fontSize": 33,
+        "fontWeight": "normal",
+        "color": "#fa7000",
+        "align": "left",
+        "strokeColor": "#000000",
+        "strokeWidth": 1
+      },
+      "format": "Codex",
+      "anchorX": 1620,
+      "anchorY": 410.5
+    },
+    {
+      "id": "item_48_5623840400",
+      "kind": "SensorText",
+      "rect": {
+        "x": 1778,
+        "y": 341,
+        "w": 205,
+        "h": 55
+      },
+      "z": 0,
+      "rotation": -71,
+      "opacity": 1,
+      "style": {
+        "fontFamily": "Shippori Mincho ExtraBold",
+        "fontSize": 31,
+        "fontWeight": "normal",
+        "color": "#fa7000",
+        "align": "left",
+        "strokeWidth": 2.5,
+        "strokeColor": "#ffffff"
+      },
+      "format": "%d%",
+      "sensorSrc": "Claude|7d 使用率|Usage",
+      "anchorX": 1778,
+      "anchorY": 368.5
+    },
+    {
+      "id": "dup_3_5753251",
+      "kind": "SensorText",
+      "rect": {
+        "x": 1518,
+        "y": 432,
+        "w": 205,
+        "h": 55
+      },
+      "z": 0,
+      "rotation": 60,
+      "opacity": 1,
+      "style": {
+        "fontFamily": "Shippori Mincho ExtraBold",
+        "fontSize": 31,
+        "fontWeight": "normal",
+        "color": "#fa7000",
+        "align": "left",
+        "strokeWidth": 2.5,
+        "strokeColor": "#ffffff"
+      },
+      "format": "%d%",
+      "sensorSrc": "Codex|7d 使用率|Usage",
+      "anchorX": 1518,
+      "anchorY": 459.5
+    }
+  ],
+  "background": "assets:aida64-skin-release-full/backgrounds/background-primary-1920x480.png"
+}

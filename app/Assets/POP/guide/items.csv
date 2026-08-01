@@ -1,0 +1,8 @@
+id,item_type,asset,x,y,width,height,sensor,min,max,note
+cpu_temp_round,Custom Gauge,custom-gauges/round/round-01-ink-burst,206,260,220,220,CPU temperature,0,100,Overlay text separately.
+gpu_temp_round,Custom Gauge,custom-gauges/round/round-03-sticker-orbit,1510,255,220,220,GPU temperature,0,100,Overlay text separately.
+cpu_load_bar,Custom Gauge,custom-gauges/horizontal/bar-01-liquid-stripe/cpu-pop-heat,668,318,300,45,CPU utilization,0,100,AIDA64 resizes the source states.
+gpu_load_bar,Custom Gauge,custom-gauges/horizontal/bar-05-wave-ribbon/gpu-violet-pop,1080,318,300,45,GPU utilization,0,100,AIDA64 resizes the source states.
+single_network_graph,Graph,network/live/native-graph-frame-500x112.png optional overlay,548,95,380,100,NIC download rate,0,network range,Create AIDA64 native Graph item. PNG refs are not dynamic.
+dual_network_graph_down,Graph,network/live/native-graph-frame-500x112.png optional overlay,990,95,380,100,NIC download rate,0,network range,Overlay two native Graph items for dual.
+dual_network_graph_up,Graph,network/live/native-graph-frame-500x112.png optional overlay,990,95,380,100,NIC upload rate,0,network range,Same position as download graph.

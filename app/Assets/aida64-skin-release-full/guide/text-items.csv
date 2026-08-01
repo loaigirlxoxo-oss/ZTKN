@@ -1,0 +1,6 @@
+name,x,y,font_size,color
+CPU Number,92,338,54,#eee8d6
+GPU Number,1528,318,54,#eee8d6
+RAM Number,452,376,42,#eee8d6
+VRAM Number,1110,376,42,#eee8d6
+Clock,1720,400,46,#eee8d6

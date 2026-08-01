@@ -1,0 +1,4 @@
+name,aida64_type,sensor,x,y,width,height,line_color,background,range,note
+Network Download Graph,Graph,NIC download rate,872,306,500,112,#00d2c4,transparent or black with low opacity if available,Set max to your expected download peak or line speed,This must be an AIDA64 native Graph item. Do not use static graph PNGs for live history.
+Network Upload Graph,Graph,NIC upload rate,872,306,500,112,#ff3484,transparent or black with low opacity if available,Set max to your expected upload peak or line speed,Layer on the same area as download if SensorPanel permits overlapping graph items.
+Network Graph Frame,Image,none,872,306,500,112,,native-graph-frame-500x112.png,,Optional static transparent frame placed above or below native graph items depending on AIDA64 layering.

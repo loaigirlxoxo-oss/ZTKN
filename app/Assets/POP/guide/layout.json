@@ -1,0 +1,101 @@
+{
+  "panel": {
+    "width": 1920,
+    "height": 480
+  },
+  "concept": "POP 01 INK PARADE",
+  "background": "backgrounds/background-primary-1920x480.png",
+  "items": [
+    {
+      "id": "cpu_temp_round",
+      "item_type": "Custom Gauge",
+      "asset": "custom-gauges/round/round-01-ink-burst",
+      "x": 206,
+      "y": 260,
+      "width": 220,
+      "height": 220,
+      "sensor": "CPU temperature",
+      "min": 0,
+      "max": 100,
+      "note": "Overlay text separately."
+    },
+    {
+      "id": "gpu_temp_round",
+      "item_type": "Custom Gauge",
+      "asset": "custom-gauges/round/round-03-sticker-orbit",
+      "x": 1510,
+      "y": 255,
+      "width": 220,
+      "height": 220,
+      "sensor": "GPU temperature",
+      "min": 0,
+      "max": 100,
+      "note": "Overlay text separately."
+    },
+    {
+      "id": "cpu_load_bar",
+      "item_type": "Custom Gauge",
+      "asset": "custom-gauges/horizontal/bar-01-liquid-stripe/cpu-pop-heat",
+      "x": 668,
+      "y": 318,
+      "width": 300,
+      "height": 45,
+      "sensor": "CPU utilization",
+      "min": 0,
+      "max": 100,
+      "note": "AIDA64 resizes the source states."
+    },
+    {
+      "id": "gpu_load_bar",
+      "item_type": "Custom Gauge",
+      "asset": "custom-gauges/horizontal/bar-05-wave-ribbon/gpu-violet-pop",
+      "x": 1080,
+      "y": 318,
+      "width": 300,
+      "height": 45,
+      "sensor": "GPU utilization",
+      "min": 0,
+      "max": 100,
+      "note": "AIDA64 resizes the source states."
+    },
+    {
+      "id": "single_network_graph",
+      "item_type": "Graph",
+      "asset": "network/live/native-graph-frame-500x112.png optional overlay",
+      "x": 548,
+      "y": 95,
+      "width": 380,
+      "height": 100,
+      "sensor": "NIC download rate",
+      "min": 0,
+      "max": "network range",
+      "note": "Create AIDA64 native Graph item. PNG refs are not dynamic."
+    },
+    {
+      "id": "dual_network_graph_down",
+      "item_type": "Graph",
+      "asset": "network/live/native-graph-frame-500x112.png optional overlay",
+      "x": 990,
+      "y": 95,
+      "width": 380,
+      "height": 100,
+      "sensor": "NIC download rate",
+      "min": 0,
+      "max": "network range",
+      "note": "Overlay two native Graph items for dual."
+    },
+    {
+      "id": "dual_network_graph_up",
+      "item_type": "Graph",
+      "asset": "network/live/native-graph-frame-500x112.png optional overlay",
+      "x": 990,
+      "y": 95,
+      "width": 380,
+      "height": 100,
+      "sensor": "NIC upload rate",
+      "min": 0,
+      "max": "network range",
+      "note": "Same position as download graph."
+    }
+  ]
+}
