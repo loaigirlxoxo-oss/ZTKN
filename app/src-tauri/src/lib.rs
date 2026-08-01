@@ -104,26 +104,9 @@ fn list_panels() -> Vec<String> {
     names
 }
 
-// 任意のテキストファイルを読む（AIDA64 の layout.json 取り込み等）。
-#[tauri::command]
-fn read_text_file(path: String) -> Result<String, String> {
-    std::fs::read_to_string(&path).map_err(|e| e.to_string())
-}
-
-// フォルダ内の画像ファイル（png/jpg/jpeg/webp）をファイル名順で絶対パス一覧にする。
-// 状態フレームゲージ（state-01..state-16）の取り込みに使う。
-#[tauri::command]
-fn list_dir_images(dir: String) -> Result<Vec<String>, String> {
-    let mut files: Vec<String> = std::fs::read_dir(&dir)
-        .map_err(|e| e.to_string())?
-        .filter_map(|e| e.ok())
-        .map(|e| e.path())
-        .filter(|p| is_image(p))
-        .map(|p| p.to_string_lossy().to_string())
-        .collect();
-    files.sort();
-    Ok(files)
-}
+// 注意: かつて read_text_file / list_dir_images を公開していたが、任意パスを無制限に
+// 読めるため削除した（5a5bfe3 で AIDA64 外部取込を廃止した際の消し残りで、呼び出し元は無い）。
+// アセットは Assets/ 配下のみを list_asset_sets / list_images で読む。
 
 // ---- アセット管理（exe隣の Assets/ にセット単位で保管） ----
 
@@ -373,16 +356,14 @@ fn read_agent_alerts_list() -> Vec<serde_json::Value> {
                 let pid = v["pid"].as_u64().unwrap_or(0) as u32;
                 // running: PID ハートビートで生存確認。pid=0(旧フック)はtsフォールバック。
                 // waiting: ts で放置チェック（15分）。
-                let alive = if status == "running" && pid > 0 {
+                if status == "running" && pid > 0 {
                     if !is_pid_alive(pid) { continue; } // プロセス死亡＝セッション終了
-                    true
-                } else {
-                    if now.saturating_sub(ts) > 900 { continue; } // 15分以上＝放置
-                    true
-                };
-                let _ = alive;
-                let cwd = v["cwd"].as_str().unwrap_or("").to_string();
-                let folder = std::path::Path::new(&cwd)
+                } else if now.saturating_sub(ts) > 900 {
+                    continue; // 15分以上＝放置
+                }
+                // cwd はフルパス（非公開プロジェクト名やユーザー名を含む）なのでフロントへ渡さない。
+                // 表示に必要な末尾のフォルダ名だけを取り出す。
+                let folder = std::path::Path::new(v["cwd"].as_str().unwrap_or(""))
                     .file_name()
                     .and_then(|s| s.to_str())
                     .unwrap_or("")
@@ -390,10 +371,9 @@ fn read_agent_alerts_list() -> Vec<serde_json::Value> {
                 list.push(serde_json::json!({
                     "session_id": v["session_id"].as_str().unwrap_or(""),
                     "folder": folder,
-                    "cwd": cwd,
                     "since": ts,
                     "provider": v["provider"].as_str().unwrap_or("claude"),
-                    "status": v["status"].as_str().unwrap_or("waiting"),
+                    "status": status,
                 }));
             }
         }
@@ -515,7 +495,7 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
-            save_panel, load_panel, list_panels, read_text_file, list_dir_images,
+            save_panel, load_panel, list_panels,
             assets_root, open_assets_dir, list_asset_sets, list_fonts, list_images, open_images_dir,
             get_claude_usage_event, get_agent_alerts
         ])

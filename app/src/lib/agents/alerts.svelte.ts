@@ -4,8 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 // 承認待ちのエージェントセッション（フックexeが ~/.claude/ztkn-state/ に書き、Rustが集約配信）。
 export interface AgentAlert {
   session_id: string;
-  folder: string; // 作業フォルダ名（どのインスタンスか識別）
-  cwd: string;
+  folder: string; // 作業フォルダ名（どのインスタンスか識別）。フルパスはRust側で落としている
   since: number; // 状態になった unix 秒
   provider: string; // "claude" | "codex"
   status: string; // "running"（実行中） | "waiting"（承認待ち）

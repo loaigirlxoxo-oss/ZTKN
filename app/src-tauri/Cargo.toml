@@ -1,8 +1,8 @@
 [package]
 name = "app"
 version = "0.3.0"
-description = "A Tauri App"
-authors = ["you"]
+description = "ZTKN - PC hardware monitor with customizable skin panels"
+authors = ["Lo-Ai Voice"]
 edition = "2021"
 default-run = "app"
 
