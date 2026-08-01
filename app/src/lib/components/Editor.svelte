@@ -126,7 +126,7 @@
     <button onclick={() => editor.redo()} disabled={!editor.canRedo} title="やり直し (Ctrl+Y)">↷</button>
     <div class="stack2">
       {#if monitorStore.list.length > 1}
-        <select title="表示するモニタ" value={monitorStore.selected} onchange={(e) => selectMonitor(+e.currentTarget.value)}>
+        <select title="表示するモニタ" bind:value={monitorStore.selected} onchange={(e) => selectMonitor(+e.currentTarget.value)}>
           {#each monitorStore.list as m, i}<option value={i}>{monitorLabel(m, i)}</option>{/each}
         </select>
       {/if}

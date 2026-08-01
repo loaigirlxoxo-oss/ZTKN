@@ -11,6 +11,42 @@
 #![windows_subsystem = "windows"]
 use std::io::Read;
 
+// Claude Code / Codex プロセス(フックの親の親)の PID を取得。
+// フック呼び出し構造: claude.exe → cmd.exe → ztkn-hook.exe
+// GetParent を2段たどって claude/node プロセスの PID を得る。
+#[cfg(windows)]
+fn get_root_pid() -> u32 {
+    use windows_sys::Win32::Foundation::{CloseHandle, INVALID_HANDLE_VALUE};
+    use windows_sys::Win32::System::Diagnostics::ToolHelp::*;
+    use windows_sys::Win32::System::Threading::GetCurrentProcessId;
+    unsafe {
+        let snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+        if snap == INVALID_HANDLE_VALUE {
+            return 0;
+        }
+        let mut entry: PROCESSENTRY32W = std::mem::zeroed();
+        entry.dwSize = std::mem::size_of::<PROCESSENTRY32W>() as u32;
+        // (pid → ppid) マップを作る
+        let mut map: std::collections::HashMap<u32, u32> = std::collections::HashMap::new();
+        if Process32FirstW(snap, &mut entry) != 0 {
+            loop {
+                map.insert(entry.th32ProcessID, entry.th32ParentProcessID);
+                if Process32NextW(snap, &mut entry) == 0 {
+                    break;
+                }
+            }
+        }
+        CloseHandle(snap);
+        // 自分 → 親(cmd.exe/shell) → 祖父(claude/node) の順にたどる
+        let own = GetCurrentProcessId();
+        let parent = *map.get(&own).unwrap_or(&0);
+        *map.get(&parent).unwrap_or(&0)
+    }
+}
+
+#[cfg(not(windows))]
+fn get_root_pid() -> u32 { 0 }
+
 fn main() {
     let action = std::env::args().nth(1).unwrap_or_default();
     // 第2引数でプロバイダを指定（既定 claude）。Claude Code フックは "claude"、Codex用は "codex"。
@@ -52,10 +88,12 @@ fn main() {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0);
+    let pid = get_root_pid();
     let out = serde_json::json!({
         "session_id": sid,
         "cwd": v["cwd"].as_str().unwrap_or(""),
         "ts": ts,
+        "pid": pid,
         "provider": provider,
         "status": status,
     });

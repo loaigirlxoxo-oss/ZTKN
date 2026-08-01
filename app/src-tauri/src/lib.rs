@@ -327,8 +327,32 @@ fn start_usage_poller(app: AppHandle) {
     });
 }
 
-// ~/.claude/ztkn-state/*.json を読み、承認待ちセッション一覧をJSON配列文字列で返す。
-// ファイル存在＝承認待ち（フックexeが作成/削除）。ts が古い（クラッシュ放置）は無視する。
+// PID がまだ生きているか確認（プロセス存在チェック）。
+#[cfg(windows)]
+fn is_pid_alive(pid: u32) -> bool {
+    use std::ffi::c_void;
+    extern "system" {
+        fn OpenProcess(desired_access: u32, inherit: i32, pid: u32) -> *mut c_void;
+        fn GetExitCodeProcess(handle: *mut c_void, exit_code: *mut u32) -> i32;
+        fn CloseHandle(handle: *mut c_void) -> i32;
+    }
+    const PROCESS_QUERY_LIMITED_INFORMATION: u32 = 0x1000;
+    const STILL_ACTIVE: u32 = 259;
+    unsafe {
+        let h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+        if h.is_null() { return false; }
+        let mut code: u32 = 0;
+        let ok = GetExitCodeProcess(h, &mut code);
+        CloseHandle(h);
+        ok != 0 && code == STILL_ACTIVE
+    }
+}
+#[cfg(not(windows))]
+fn is_pid_alive(_pid: u32) -> bool { false }
+
+// ~/.claude/ztkn-state/*.json を読み、承認待ちセッション一覧を返す。
+// running: PID が生きていれば永続（ハートビート代わり）、死んでいたら除外。
+// waiting: PID がなければ ts で 15分スタールチェック（従来通り）。
 fn read_agent_alerts_list() -> Vec<serde_json::Value> {
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -345,9 +369,18 @@ fn read_agent_alerts_list() -> Vec<serde_json::Value> {
                 let Ok(txt) = std::fs::read_to_string(&p) else { continue };
                 let Ok(v) = serde_json::from_str::<serde_json::Value>(&txt) else { continue };
                 let ts = v["ts"].as_u64().unwrap_or(0);
-                if now.saturating_sub(ts) > 900 {
-                    continue; // 15分以上前＝放置とみなし無視
-                }
+                let status = v["status"].as_str().unwrap_or("waiting");
+                let pid = v["pid"].as_u64().unwrap_or(0) as u32;
+                // running: PID ハートビートで生存確認。pid=0(旧フック)はtsフォールバック。
+                // waiting: ts で放置チェック（15分）。
+                let alive = if status == "running" && pid > 0 {
+                    if !is_pid_alive(pid) { continue; } // プロセス死亡＝セッション終了
+                    true
+                } else {
+                    if now.saturating_sub(ts) > 900 { continue; } // 15分以上＝放置
+                    true
+                };
+                let _ = alive;
                 let cwd = v["cwd"].as_str().unwrap_or("").to_string();
                 let folder = std::path::Path::new(&cwd)
                     .file_name()
@@ -398,7 +431,7 @@ fn get_agent_alerts() -> String {
     serde_json::to_string(&read_agent_alerts_list()).unwrap_or_else(|_| "[]".into())
 }
 
-// 承認待ちを定期配信するポーラー（~2秒）。件数(usageセンサー) と 待ちフォルダ一覧 の両方を流す。
+// 承認待ちを定期配信するポーラー（1秒）。件数(usageセンサー) と 待ちフォルダ一覧 の両方を流す。
 fn start_agent_alert_poller(app: AppHandle) {
     std::thread::spawn(move || loop {
         let list = read_agent_alerts_list();
@@ -407,7 +440,7 @@ fn start_agent_alert_poller(app: AppHandle) {
             "agent-alerts",
             serde_json::to_string(&list).unwrap_or_else(|_| "[]".into()),
         ); // B: フォルダ一覧（AlertList部品用）
-        std::thread::sleep(std::time::Duration::from_secs(2));
+        std::thread::sleep(std::time::Duration::from_secs(1));
     });
 }
 

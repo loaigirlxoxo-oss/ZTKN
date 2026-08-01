@@ -5194,6 +5194,7 @@ version = "0.1.0"
 dependencies = [
  "dirs 5.0.1",
  "serde_json",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
