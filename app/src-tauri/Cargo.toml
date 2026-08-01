@@ -1,6 +1,6 @@
 [package]
 name = "app"
-version = "0.3.0"
+version = "0.3.1"
 description = "ZTKN - PC hardware monitor with customizable skin panels"
 authors = ["Lo-Ai Voice"]
 edition = "2021"
