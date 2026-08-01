@@ -292,10 +292,18 @@ fn write_codex_at(path: &Path, exe: &Path, enable: bool) -> Result<(), String> {
             }
         }
         if enable {
-            let mut inner = Table::new();
-            inner["type"] = toml_edit::value("command");
-            inner["command"] = toml_edit::value(format!("{posix} {action} codex"));
-            inner["command_windows"] = toml_edit::value(format!("{native} {action} codex"));
+            // Codex 自身はコマンドをリテラル文字列(シングルクォート)で書く。
+            // 信頼ハッシュが生テキスト基準の場合に記法差で不一致にならないよう合わせる
+            // （ハッシュが値基準か生テキスト基準かは公式に明記されていない）。
+            // 記法を指定する公開APIが無いので、その形のTOMLを解析して取り出す。
+            let snippet = format!(
+                "type = \"command\"\ncommand = '{posix} {action} codex'\ncommand_windows = '{native} {action} codex'\n"
+            );
+            let inner: Table = snippet
+                .parse::<DocumentMut>()
+                .map_err(|e| format!("フック定義の生成に失敗: {e}"))?
+                .as_table()
+                .clone();
             let mut inner_arr = ArrayOfTables::new();
             inner_arr.push(inner);
             let mut entry = Table::new();
@@ -594,6 +602,16 @@ command = "my-own-hook"
         );
         // Codex に存在しないイベントを書いていないこと（--strict-config で弾かれる）
         assert!(!txt.contains("PostToolUseFailure"), "Codexに無いイベントを書いている");
+        // Codex 自身と同じリテラル文字列(シングルクォート)で書くこと。
+        // 信頼ハッシュが生テキスト基準の場合、記法が違うと再承認が必要になる。
+        assert!(
+            txt.contains("command_windows = 'C:\\ProgramData"),
+            "command_windows がシングルクォートで書かれていない"
+        );
+        assert!(
+            !txt.contains("command_windows = \""),
+            "ダブルクォートで書かれている"
+        );
         // 手書きの内容が残っている
         assert!(txt.contains("# 利用者が手で書いた設定"), "コメントが消えた");
         assert!(txt.contains("gpt-5.6-sol"), "他の設定が消えた");
