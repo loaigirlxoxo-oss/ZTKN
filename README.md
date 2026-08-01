@@ -26,6 +26,14 @@ AIDA64 SensorPanel 風の、**サブモニタ常駐 PC ステータスダッシ�
 2. 途中で PawnIO ドライバが自動でサイレント導入されます
 3. 起動（UAC を承認）
 
+**インストーラは未署名です。** SmartScreen が「WindowsによってPCが保護されました」と
+警告するので、「詳細情報」→「実行」で進めてください。気になる場合は、リリースに記載の
+SHA256 とダウンロードしたファイルのハッシュを照合できます。
+
+```powershell
+Get-FileHash ZTKN_0.3.1_x64-setup.exe -Algorithm SHA256
+```
+
 ## 使い方
 
 - 起動するとエディタが開きます。左のパレットから部品を追加し、ドラッグで配置、右のプロパティで編集します。
@@ -165,8 +173,15 @@ npm run tauri build
 生成物: `app/src-tauri/target/release/bundle/nsis/ZTKN_x.x.x_x64-setup.exe`
 
 **注意**:
-- `Assets/` `image/` `Panels/`、サイドカー exe、`PawnIO_setup.exe` は `.gitignore` 済み（ユーザーコンテンツ / 生成物 / サードパーティ）。
-  ソースには含まれません。配布インストーラには同梱されます。
+- `Assets/`（素材2445枚）と `Panels/`（サンプルパネル8件）はリポジトリに含まれます。
+  インストーラに同梱されるものなので、配布物の中身をソースから検証できるようにしています。
+- リポジトリに含まれないもの（各自で用意する）:
+  - サイドカー exe → 手順2で生成
+  - `PawnIO_setup.exe` → 手順3で配置
+  - `image/`（1枚絵置き場。アプリが起動時に作る）
+- **clone 先のパスは短くしてください。** 素材のパスが最長162文字あり、Windows の
+  260文字制限に掛かると `Filename too long` で clone が失敗します。
+  深い場所に置く必要がある場合は `git config --global core.longpaths true` を設定してください。
 - サイドカーのプレリリース版は WinRing0 を廃止しており、温度は PawnIO 導入 + 管理者実行が前提です。
 
 ## ライセンス / サードパーティ
