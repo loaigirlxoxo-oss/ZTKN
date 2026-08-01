@@ -277,6 +277,15 @@ fn get_claude_usage_event() -> Result<String, String> {
 // 全 AI ツール使用量を定期取得して "usage" イベントで流すバックグラウンドポーラー。
 // 実センサー("sensors")とは別イベント＝値マップを潰さない。全ツール常に一括で出す
 // （usageValues は差し替え方式なので一部だけ出すと他が消えるため）。失敗はログのみ。
+//
+// 取得間隔は全ツール5分。使用量は5時間/7日枠なので分単位で追う必要がなく、
+// リセットまでの残り時間はフロントが epoch から毎フレーム計算するため再取得も不要。
+// Claude API は 429 を返すことがあるので指数バックオフを入れる（毎分叩き続けると
+// 制限が解除されず張り付いたままになる）。
+const USAGE_TICK_SECS: u64 = 60;
+const USAGE_INTERVAL_TICKS: u64 = 5; // 5分
+const BACKOFF_MAX_TICKS: u64 = 60; // 上限1時間
+
 fn start_usage_poller(app: AppHandle) {
     std::thread::spawn(move || {
         // 直近値をキャッシュ＝一時的な取得失敗でも前回値を出し続ける（表示が消えない）。
@@ -284,13 +293,25 @@ fn start_usage_poller(app: AppHandle) {
         let mut codex_cache: Option<usage::CodexUsage> = None;
         let mut ag_cache: Option<usage::AntigravityUsage> = None;
         let mut tick = 0u64;
+        let mut claude_next = 0u64; // 次に Claude を取得するtick
+        let mut claude_backoff = 0u64; // 連続失敗時の追加待ち(tick)
         loop {
-            match usage::fetch_claude_usage() {
-                Ok(u) => claude_cache = Some(u),
-                Err(e) => eprintln!("[usage] claude: {e}"),
+            if tick >= claude_next {
+                match usage::fetch_claude_usage() {
+                    Ok(u) => {
+                        claude_cache = Some(u);
+                        claude_backoff = 0;
+                        claude_next = tick + USAGE_INTERVAL_TICKS;
+                    }
+                    Err(e) => {
+                        eprintln!("[usage] claude: {e}");
+                        // 失敗するほど間隔を倍にする（5,10,20,40,60...分）
+                        claude_backoff = (claude_backoff.max(USAGE_INTERVAL_TICKS) * 2).min(BACKOFF_MAX_TICKS);
+                        claude_next = tick + claude_backoff;
+                    }
+                }
             }
-            // Codex / Antigravity はプロセス起動・スキャンが重いので5分に1回
-            if tick % 5 == 0 {
+            if tick % USAGE_INTERVAL_TICKS == 0 {
                 match usage::fetch_codex_usage() {
                     Ok(c) => codex_cache = Some(c),
                     Err(e) => eprintln!("[usage] codex: {e}"),
@@ -305,7 +326,7 @@ fn start_usage_poller(app: AppHandle) {
                 usage::usage_event_json(claude_cache.as_ref(), codex_cache.as_ref(), ag_cache.as_ref()),
             );
             tick += 1;
-            std::thread::sleep(std::time::Duration::from_secs(60));
+            std::thread::sleep(std::time::Duration::from_secs(USAGE_TICK_SECS));
         }
     });
 }
