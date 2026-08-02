@@ -34,23 +34,42 @@ fn sessions_dir() -> Option<PathBuf> {
     Some(dirs::home_dir()?.join(".codex").join("sessions"))
 }
 
-// sessions/年/月/日/ の3階層を辿って rollout-*.jsonl を集める。
-// 全部を舐めると数百件になるので、更新が新しいものだけ返す。
+// 走査対象の日付ディレクトリ（sessions/YYYY/MM/DD）を、今日と昨日に絞って返す。
+// 全階層を舐めると履歴が増えるほど read_dir と metadata が増え、1秒ごとのポーラーでは
+// 常時ディスクを叩くことになる。RECENT_SECS は1時間なので、日付をまたぐ場合を考えて
+// 昨日まで見れば足りる。
+fn target_day_dirs(root: &Path, now: u64) -> Vec<PathBuf> {
+    let mut out = vec![];
+    for back in [0i64, 1] {
+        let t = chrono::DateTime::from_timestamp(now as i64 - back * 86_400, 0);
+        let Some(t) = t else { continue };
+        let d = root
+            .join(t.format("%Y").to_string())
+            .join(t.format("%m").to_string())
+            .join(t.format("%d").to_string());
+        if d.is_dir() {
+            out.push(d);
+        }
+    }
+    out
+}
+
+// 対象日のディレクトリから rollout-*.jsonl を集める。更新が新しいものだけ返す。
 fn recent_rollouts(dir: &Path, now: u64) -> Vec<PathBuf> {
     let mut out = vec![];
-    let mut stack = vec![dir.to_path_buf()];
-    while let Some(d) = stack.pop() {
+    for d in target_day_dirs(dir, now) {
         let Ok(rd) = std::fs::read_dir(&d) else { continue };
         for e in rd.flatten() {
             let p = e.path();
+            if !p
+                .file_name()
+                .and_then(|s| s.to_str())
+                .map(|n| n.starts_with("rollout-") && n.ends_with(".jsonl"))
+                .unwrap_or(false)
+            {
+                continue;
+            }
             let Ok(md) = e.metadata() else { continue };
-            if md.is_dir() {
-                stack.push(p);
-                continue;
-            }
-            if !p.file_name().and_then(|s| s.to_str()).map(|n| n.starts_with("rollout-") && n.ends_with(".jsonl")).unwrap_or(false) {
-                continue;
-            }
             let age = md
                 .modified()
                 .ok()

@@ -137,25 +137,36 @@ fn backup_once(path: &Path) -> Result<(), String> {
 
 // ---- Claude Code (settings.json) ----
 
-// ZTKN が入れたエントリか。command 文字列に ztkn-hook.exe を含むもの。
-fn is_ztkn_entry(entry: &Value) -> bool {
-    entry["hooks"]
-        .as_array()
-        .map(|hs| {
-            hs.iter().any(|h| {
-                h["command"]
-                    .as_str()
-                    .map(|c| c.to_ascii_lowercase().contains(HOOK_EXE_NAME))
-                    .unwrap_or(false)
-            })
-        })
+// 個々のフックコマンドが ZTKN のものか。
+fn is_ztkn_command(h: &Value) -> bool {
+    h["command"]
+        .as_str()
+        .map(|c| c.to_ascii_lowercase().contains(HOOK_EXE_NAME))
         .unwrap_or(false)
+}
+
+// ZTKN が入れたエントリか（ZTKN のコマンドを含むか）。判定用。
+fn is_ztkn_entry(entry: &Value) -> bool {
+    entry["hooks"].as_array().map(|hs| hs.iter().any(is_ztkn_command)).unwrap_or(false)
+}
+
+// エントリから ZTKN のコマンドだけを取り除く。
+// 戻り値 false = 中身が空になったのでエントリごと消してよい。
+// 利用者が同じエントリに自分のコマンドを足している場合、それを巻き添えにしないための処理
+// （エントリ丸ごと消すと他人のフックまで消える）。
+fn strip_ztkn_commands(entry: &mut Value) -> bool {
+    let Some(hs) = entry["hooks"].as_array_mut() else { return true };
+    hs.retain(|h| !is_ztkn_command(h));
+    !hs.is_empty()
 }
 
 fn claude_entry(exe: &Path, action: &str) -> Value {
     // Claude Code は Windows でも bash 経由で実行するため Git Bash 形式のパスを渡す。
+    // パスは必ず二重引用符で囲む。インストール先は既定で C:\Program Files\ZTKN\ であり
+    // スペースを含むため、囲まないと bash が空白で分割して /c/Program を実行しようとする
+    // （実測で確認済み。開発時のパスにはスペースが無いため気付きにくい）。
     let p = to_git_bash_path(exe);
-    json!({ "hooks": [{ "type": "command", "command": format!("bash -c '{p} {action}'") }] })
+    json!({ "hooks": [{ "type": "command", "command": format!("bash -c '\"{p}\" {action}'") }] })
 }
 
 // settings.json に4イベント分を入れる。既存の ZTKN エントリは除去してから足す（冪等）。
@@ -196,7 +207,11 @@ fn write_claude_at(path: &Path, exe: &Path, enable: bool) -> Result<(), String> 
             .entry(event)
             .or_insert_with(|| json!([]));
         let arr = list.as_array_mut().ok_or("hooks の中身が配列ではありません")?;
-        arr.retain(|e| !is_ztkn_entry(e)); // 旧ZTKNエントリを除去＝重複しない
+        // ZTKN のコマンドだけを抜く。同じエントリに利用者のコマンドがあれば残す。
+        for e in arr.iter_mut() {
+            strip_ztkn_commands(e);
+        }
+        arr.retain(|e| e["hooks"].as_array().map(|h| !h.is_empty()).unwrap_or(true));
         if enable {
             arr.push(claude_entry(exe, action));
         }
@@ -267,28 +282,30 @@ fn write_codex_at(path: &Path, exe: &Path, enable: bool) -> Result<(), String> {
         .as_table_mut()
         .ok_or("config.toml の hooks が想定の形式ではありません")?;
 
+    // 個々のフック定義が ZTKN のものか
+    fn is_ztkn_hook(h: &Table) -> bool {
+        ["command", "command_windows"].iter().any(|k| {
+            h.get(*k)
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_ascii_lowercase().contains(HOOK_EXE_NAME))
+                .unwrap_or(false)
+        })
+    }
+
     for (event, action) in CODEX_EVENTS {
-        // [[hooks.<Event>]] は配列テーブル。ZTKN 以外のエントリは残す。
+        // [[hooks.<Event>]] は配列テーブル。ZTKN のフック定義だけを抜き、
+        // 同じテーブルに利用者の定義があれば残す（テーブルごと消すと巻き添えになる）。
         let mut kept = ArrayOfTables::new();
         if let Some(existing) = hooks.get(event).and_then(|i| i.as_array_of_tables()) {
             for t in existing.iter() {
-                let is_ztkn = t
-                    .get("hooks")
-                    .and_then(|i| i.as_array_of_tables())
-                    .map(|inner| {
-                        inner.iter().any(|h| {
-                            ["command", "command_windows"].iter().any(|k| {
-                                h.get(*k)
-                                    .and_then(|v| v.as_str())
-                                    .map(|s| s.to_ascii_lowercase().contains(HOOK_EXE_NAME))
-                                    .unwrap_or(false)
-                            })
-                        })
-                    })
-                    .unwrap_or(false);
-                if !is_ztkn {
-                    kept.push(t.clone());
+                let mut t = t.clone();
+                if let Some(inner) = t.get_mut("hooks").and_then(|i| i.as_array_of_tables_mut()) {
+                    inner.retain(|h| !is_ztkn_hook(h));
+                    if inner.is_empty() {
+                        continue; // ZTKN のものだけだった＝テーブルごと不要
+                    }
                 }
+                kept.push(t);
             }
         }
         if enable {
@@ -450,8 +467,41 @@ mod tests {
     fn claude_entry_has_expected_shape() {
         let e = claude_entry(Path::new(r"C:\ProgramData\ZTKN\ztkn-hook.exe"), "wait");
         let cmd = e["hooks"][0]["command"].as_str().unwrap();
-        assert_eq!(cmd, "bash -c '/c/ProgramData/ZTKN/ztkn-hook.exe wait'");
+        assert_eq!(cmd, "bash -c '\"/c/ProgramData/ZTKN/ztkn-hook.exe\" wait'");
         assert_eq!(e["hooks"][0]["type"].as_str().unwrap(), "command");
+    }
+
+    // 配布時のインストール先はスペースを含む。引用しないと bash が分割して失敗する
+    // （実測で確認済み）。開発時のパスにはスペースが無く気付けないので、テストで固定する。
+    #[test]
+    fn claude_command_quotes_path_with_spaces() {
+        let e = claude_entry(Path::new(r"C:\Program Files\ZTKN\ztkn-hook.exe"), "running");
+        let cmd = e["hooks"][0]["command"].as_str().unwrap();
+        assert_eq!(cmd, "bash -c '\"/c/Program Files/ZTKN/ztkn-hook.exe\" running'");
+        // 実行ファイルのパスが引用符で囲まれていること
+        assert!(cmd.contains("'\"/c/Program Files/"), "パスが引用されていない: {cmd}");
+    }
+
+    // 同じエントリに利用者のコマンドが同居している場合、それを消さないこと
+    #[test]
+    fn strip_keeps_foreign_command_in_same_entry() {
+        let mut e = json!({ "hooks": [
+            { "type": "command", "command": "bash -c 'my-own-check'" },
+            { "type": "command", "command": "bash -c '\"/c/x/ztkn-hook.exe\" running'" }
+        ]});
+        let keep = strip_ztkn_commands(&mut e);
+        assert!(keep, "利用者のコマンドが残るのでエントリは維持されるはず");
+        let hs = e["hooks"].as_array().unwrap();
+        assert_eq!(hs.len(), 1);
+        assert!(hs[0]["command"].as_str().unwrap().contains("my-own-check"));
+    }
+
+    #[test]
+    fn strip_reports_empty_when_only_ztkn() {
+        let mut e = json!({ "hooks": [
+            { "type": "command", "command": "bash -c '\"/c/x/ztkn-hook.exe\" running'" }
+        ]});
+        assert!(!strip_ztkn_commands(&mut e), "ZTKNだけなら空になったと報告するはず");
     }
 
     #[test]
@@ -781,6 +831,35 @@ command = "my-own-hook"
         // 本物が無傷であること
         let orig: Value = serde_json::from_str(&std::fs::read_to_string(&real_claude).unwrap()).unwrap();
         assert!(orig["hooks"].is_object(), "本物のsettings.jsonが読めない＝壊した可能性");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // Codex側も、同じテーブルに利用者の定義があれば巻き添えにしないこと
+    #[test]
+    fn codex_keeps_foreign_hook_in_same_table() {
+        let dir = temp_dir("codexmix");
+        let path = dir.join("config.toml");
+        // ZTKN が使うイベントに、利用者が自分の定義を同居させている状態を作る
+        std::fs::write(
+            &path,
+            "[[hooks.PreToolUse]]\n\
+             [[hooks.PreToolUse.hooks]]\n\
+             type = \"command\"\n\
+             command = 'my-own-hook'\n",
+        )
+        .unwrap();
+        let exe = Path::new(r"C:\Program Files\ZTKN\ztkn-hook.exe");
+
+        write_codex_at(&path, exe, true).unwrap();
+        let txt = std::fs::read_to_string(&path).unwrap();
+        assert!(txt.contains("my-own-hook"), "有効化で利用者の定義が消えた");
+        assert!(txt.contains("ztkn-hook.exe running codex"), "ZTKNの定義が入っていない");
+
+        write_codex_at(&path, exe, false).unwrap();
+        let txt2 = std::fs::read_to_string(&path).unwrap();
+        assert!(txt2.contains("my-own-hook"), "無効化で利用者の定義まで消えた");
+        assert!(!txt2.contains("ztkn-hook"), "無効化でZTKNが残っている");
 
         let _ = std::fs::remove_dir_all(&dir);
     }
