@@ -34,7 +34,9 @@ use serde_json::{json, Value};
 const CLAUDE_EVENTS: [(&str, &str, &str); 7] = [
     ("UserPromptSubmit", "running", ""),   // ターン開始
     ("PreToolUse", "running", ""),         // ツール実行直前
-    ("PermissionRequest", "running", ""),  // 承認の判断が要る＝まだ待ちとは限らない
+    // 承認の判断に入った印を付ける（status は running）。承認待ちで止まっているのか
+    // 承認済みで実行中なのかはここでは決まらないので、読み手が経過時間で判断する。
+    ("PermissionRequest", "permission", ""),
     // matcher は付けない。種別の判定はフック側(notify)が stdin の notification_type で行う。
     // matcher="permission_prompt" を指定すると発火しない事例に当たったため、
     // Claude 側の matcher 実装に依存しない形にする。
@@ -531,10 +533,11 @@ mod tests {
         assert_eq!(n.1, "notify", "種別判定をフック側で行うため notify を渡す");
         assert_eq!(n.2, "", "matcher は付けない（付けると発火しない事例があった）");
         // PermissionRequest は自動承認でも発火するので wait にしてはいけない。
-        // running 側なら入っていてよい（判断中＝まだ待ちではない）。
+        // permission（判断に入った印。status は running）を渡し、承認待ちへの昇格は
+        // 読み手が経過時間で判断する。
         let pr = CLAUDE_EVENTS.iter().find(|(e, _, _)| *e == "PermissionRequest");
         if let Some((_, action, _)) = pr {
-            assert_eq!(*action, "running", "PermissionRequest を wait にすると誤表示になる");
+            assert_eq!(*action, "permission", "PermissionRequest を wait にすると誤表示になる");
         }
         // wait を直接指定するイベントは無い（notify 経由になる）
         assert!(

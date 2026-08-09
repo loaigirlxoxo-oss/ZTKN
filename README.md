@@ -172,29 +172,48 @@ ZTKN はこの仕組みを迂回しません。承認は Codex 側で行って�
 { "hooks": [{ "type": "command", "command": "bash -c '/c/Program Files/ZTKN/ztkn-hook.exe running'" }] }
 ```
 
-| イベント | matcher | 引数 | 意味 |
-|-|-|-|-|
-| `UserPromptSubmit` | | `running` | ターン開始 |
-| `PreToolUse` | | `running` | ツール実行直前 |
-| `PermissionRequest` | | `running` | 承認の判断中（まだ待ちとは限らない） |
-| `Notification` | `permission_prompt` | `wait` | **承認ダイアログが実際に表示された** |
-| `PostToolUse` | | `running` | ツール成功 |
-| `PostToolUseFailure` | | `running` | ツール失敗（まだ動いている） |
-| `Stop` | | `clear` | ターン終了＝解除 |
+| イベント | 引数 | 意味 |
+|-|-|-|
+| `UserPromptSubmit` | `running` | ターン開始 |
+| `PreToolUse` | `running` | ツール実行直前 |
+| `PermissionRequest` | `permission` | 承認の判断に入った（下記参照） |
+| `Notification` | `notify` | 通知。`permission_prompt` なら承認待ち |
+| `PostToolUse` | `running` | ツール成功 |
+| `PostToolUseFailure` | `running` | ツール失敗（まだ動いている） |
+| `Stop` | `clear` | ターン終了＝解除 |
 
-承認待ちの判定には `Notification` を使い、`PermissionRequest` は `running` 側に入れています。
-`PermissionRequest` は承認の判断が必要になるたびに発火し、**設定で自動承認される場合も発火する**
-ため、これを承認待ちにすると、承認済みでツールを実行している数十秒〜数分の間ずっと
-「承認待ち」と誤表示されます。
+`Notification` には `matcher` を付けていません。種別の判定はフック側が受け取った
+`notification_type` を見て行います（`matcher` を指定すると発火しない事例があったため）。
 
-**承認待ちの表示には制約があります**（Claude Code 側の仕様・既知の不具合）。
+#### 承認待ちの判定について（重要な制約）
 
-- ユーザーが**6秒以上アイドル**でないと `Notification` が発火しません
-- **思考中に承認プロンプトが出ると発火しない**バージョンがあります
-- 発生からフック実行まで**数秒の遅延**があります
+**承認待ちは「30秒間動きが無ければそうみなす」という推測で判定しています。** 確実な検出ができないためです。
 
-そのため承認待ちは数秒遅れて表示され、状況によっては表示されないことがあります。
-常時「実行中なのに承認待ち」と誤表示されるより、たまに取りこぼすほうが実害が小さいという判断です。
+理由:
+
+- **`Notification` フックは VS Code 拡張では発火しません。**
+  本来これが「承認ダイアログが出た」ことを知る唯一の確実な手段ですが、
+  未修正の不具合として繰り返し報告されています
+  （[#11156](https://github.com/anthropics/claude-code/issues/11156) /
+  [#16114](https://github.com/anthropics/claude-code/issues/16114) /
+  [#26925](https://github.com/anthropics/claude-code/issues/26925) /
+  [#59718](https://github.com/anthropics/claude-code/issues/59718)）。ターミナルの CLI では発火します。
+- **`PermissionRequest` は実際にブロックしていなくても毎回発火します**
+  （[#29212](https://github.com/anthropics/claude-code/issues/29212)）。
+  これを承認待ちにすると、承認済みでツールを実行している間ずっと誤表示されます。
+- セッションの記録（transcript）にも承認待ちの情報は残りません。
+
+フックから見ると「承認待ちで停止中」と「承認済みで長いツールを実行中」は
+**完全に同じ signature** になります。そのため経過時間で推測しています。
+
+| | |
+|-|-|
+| 判定 | `PermissionRequest` から **30秒**更新が無ければ承認待ち |
+| 誤検出 | **30秒以上かかるツール実行は承認待ちと表示されます**（ビルド・テスト等） |
+| 遅延 | 承認待ちの表示は最大30秒遅れます |
+
+CLI（ターミナルの `claude`）では `Notification` が発火するため、
+承認ダイアログが出た時点で正確に承認待ちになります（30秒待つ必要はありません）。
 
 `PostToolUseFailure` と `PreToolUse` を含めているのは、**ツールが失敗したり承認を拒否した場合に
 `PostToolUse` が発火しない**ためです。これらを拾わないと「承認待ち」のまま固まります。

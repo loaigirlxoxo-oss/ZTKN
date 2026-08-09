@@ -80,8 +80,16 @@ fn main() {
     // Claude 側の matcher に頼らないのは、matcher を付けると発火しない事例に当たったため。
     // 承認ダイアログ(permission_prompt)だけを承認待ちにし、それ以外の通知
     // (idle_prompt=入力待ち, auth_success 等)では状態を変えない。
+    // pending=true は「承認の判断に入った」印。承認待ちで止まっているのか、
+    // 承認済みでツールを実行中なのかはフックからは区別できないため、
+    // 読み手側が経過時間で判断する（詳しくは lib.rs の PENDING_TO_WAIT_SECS）。
+    let mut pending = false;
     let status = match action.as_str() {
         "running" => "running",
+        "permission" => {
+            pending = true;
+            "running" // この時点ではまだ待ちと決まっていない
+        }
         "wait" | "waiting" => "waiting",
         "notify" => {
             let kind = v["notification_type"].as_str().unwrap_or("");
@@ -108,6 +116,7 @@ fn main() {
         "pid": pid,
         "provider": provider,
         "status": status,
+        "pending": pending,
     });
     let _ = std::fs::write(&file, out.to_string());
 }

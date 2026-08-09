@@ -340,6 +340,29 @@ fn start_usage_poller(app: AppHandle) {
 const RUNNING_STALE_SECS: u64 = 3600; // 1時間
 const WAITING_STALE_SECS: u64 = 900; // 15分（承認を放置した場合の掃除）
 
+// 承認の判断に入って(pending)からこの時間、状態が更新されなければ承認待ちとみなす。
+//
+// 本来は Notification(permission_prompt) で確実に判定したいが、VS Code 拡張では
+// このフックが発火しない（anthropics/claude-code の複数Issueで報告済みの未修正不具合）。
+// PermissionRequest はブロックしていなくても毎回発火するため単独では使えない(#29212)。
+// フックから見ると「承認待ちで停止中」と「承認済みで長いツールを実行中」は
+// 完全に同じ signature になるため、時間で推測するしかない。
+//
+// 副作用: この時間より長くかかるツール実行は承認待ちと誤判定される。
+// 短くすると誤判定が増え、長くすると気付くのが遅れる。
+const PENDING_TO_WAIT_SECS: u64 = 30;
+
+// pending 印が付いたまま一定時間が経っていれば承認待ちへ昇格する。
+fn effective_status(status: &str, pending: bool, ts: u64, now: u64) -> &'static str {
+    if status == "waiting" {
+        return "waiting";
+    }
+    if pending && now.saturating_sub(ts) >= PENDING_TO_WAIT_SECS {
+        return "waiting";
+    }
+    "running"
+}
+
 // 状態ファイルを一覧に出すか。時間だけで判定する。
 //
 // 状態ファイルには pid も記録されているが、判定には使わない。フックの祖先を辿って
@@ -390,7 +413,9 @@ fn read_agent_alerts_list() -> Vec<serde_json::Value> {
                     continue;
                 };
                 let ts = v["ts"].as_u64().unwrap_or(0);
-                let status = v["status"].as_str().unwrap_or("waiting");
+                let raw_status = v["status"].as_str().unwrap_or("waiting");
+                // 承認の判断に入ったまま一定時間動きが無ければ承認待ちとみなす
+                let status = effective_status(raw_status, v["pending"].as_bool().unwrap_or(false), ts, now);
                 if !should_show(status, ts, now) {
                     let _ = std::fs::remove_file(&p); // 期限切れ＝もう更新されないので消す
                     continue;
@@ -573,6 +598,23 @@ mod tests {
 
     // 実行中/承認待ちの表示判定。PIDを「死亡＝除外」に使うと実行中が一切出なくなる
     // （フックの祖先PIDは短命プロセスを指すため）ので、その退行を防ぐ。
+    // 承認の判断に入ってから動きが無ければ承認待ちへ昇格する。
+    // VS Code 拡張では Notification が発火しないため、時間で推測するしかない。
+    #[test]
+    fn pending_becomes_waiting_after_threshold() {
+        let now = 1_000_000u64;
+        // 判断直後はまだ実行中扱い（自動承認なら即ツールが動く）
+        assert_eq!(effective_status("running", true, now - 1, now), "running");
+        assert_eq!(effective_status("running", true, now - 29, now), "running");
+        // しきい値を超えたら承認待ち
+        assert_eq!(effective_status("running", true, now - 30, now), "waiting");
+        assert_eq!(effective_status("running", true, now - 300, now), "waiting");
+        // pending が付いていない実行中は、いつまで経っても実行中のまま
+        assert_eq!(effective_status("running", false, now - 9999, now), "running");
+        // 既に承認待ちならそのまま
+        assert_eq!(effective_status("waiting", false, now - 1, now), "waiting");
+    }
+
     #[test]
     fn running_survives_long_tool_execution() {
         let now = 1_000_000u64;
