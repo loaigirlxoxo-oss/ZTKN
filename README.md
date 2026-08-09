@@ -172,18 +172,22 @@ ZTKN はこの仕組みを迂回しません。承認は Codex 側で行って�
 { "hooks": [{ "type": "command", "command": "bash -c '/c/Program Files/ZTKN/ztkn-hook.exe running'" }] }
 ```
 
-| イベント | 引数 | 意味 |
-|-|-|-|
-| `UserPromptSubmit` | `running` | ターン開始 |
-| `PreToolUse` | `running` | ツール実行直前＝待ちではない |
-| `PermissionRequest` | `wait` | **承認ダイアログ表示中＝人間を待っている** |
-| `PostToolUse` | `running` | ツール成功 |
-| `PostToolUseFailure` | `running` | ツール失敗（まだ動いている） |
-| `Stop` | `clear` | ターン終了＝解除 |
+| イベント | matcher | 引数 | 意味 |
+|-|-|-|-|
+| `UserPromptSubmit` | | `running` | ターン開始 |
+| `PreToolUse` | | `running` | ツール実行直前 |
+| `Notification` | `permission_prompt` | `wait` | **承認ダイアログが実際に表示された** |
+| `PostToolUse` | | `running` | ツール成功 |
+| `PostToolUseFailure` | | `running` | ツール失敗（まだ動いている） |
+| `Stop` | | `clear` | ターン終了＝解除 |
+
+承認待ちの判定に `PermissionRequest` を使っていません。このイベントは承認の判断が必要になる
+たびに発火し、**設定で自動承認される場合も発火する**ため、承認済みでツールを実行している
+数十秒〜数分の間ずっと「承認待ち」と誤表示されます。実際にダイアログが出た時だけ発火するのは
+`Notification` の `permission_prompt` です。
 
 `PostToolUseFailure` と `PreToolUse` を含めているのは、**ツールが失敗したり承認を拒否した場合に
-`PostToolUse` が発火しない**ためです。これらを拾わないと「承認待ち」のまま固まり、
-動作中なのに実行中0・承認待ち1と両方が誤表示されます。
+`PostToolUse` が発火しない**ためです。これらを拾わないと「承認待ち」のまま固まります。
 
 Claude Code は Windows でもフックを bash 経由で実行するため、Git Bash 形式のパス（`/c/...`）を使います。
 

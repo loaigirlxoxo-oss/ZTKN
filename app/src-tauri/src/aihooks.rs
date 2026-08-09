@@ -14,23 +14,23 @@ use std::path::{Path, PathBuf};
 use serde::Serialize;
 use serde_json::{json, Value};
 
-// フックが呼ばれるイベントと、ztkn-hook に渡す動作の対応。
+// フックが呼ばれるイベントと ztkn-hook に渡す動作の対応。(イベント名, 動作, matcher)。
 //
-// 実際の発火順は PreToolUse → PermissionRequest → PostToolUse / PostToolUseFailure。
-// PermissionRequest はユーザーにダイアログが出た時だけ発火する（自動承認では出ない）ので、
-// これが「本当に人間を待っている」状態を表す。
+// 承認待ちの判定に PermissionRequest を使ってはいけない。これは承認の判断が必要になる
+// たびに発火し、設定で自動承認される場合も発火する。wait にすると、承認済みで
+// ツールを実行している数十秒〜数分の間ずっと「承認待ち」と誤表示される（実測で確認）。
+// 実際にダイアログが出た時だけ発火するのは Notification の notification_type=permission_prompt。
 //
-// 重要: ツールが失敗した時は PostToolUse ではなく PostToolUseFailure が発火する。
-// 承認を拒否した場合も PostToolUse は来ない。この2つを拾わないと waiting のまま固まり、
-// 動作中なのに「実行中0・承認待ち1」と両方が誤表示される（実測で確認）。
+// ツールが失敗した時は PostToolUse ではなく PostToolUseFailure が発火する。
+// 承認を拒否した場合も PostToolUse は来ない。この2つを拾わないと waiting のまま固まる。
 // PreToolUse も running にすることで、拒否や失敗の後も次のツールで復帰する。
-const CLAUDE_EVENTS: [(&str, &str); 6] = [
-    ("UserPromptSubmit", "running"), // ターン開始
-    ("PreToolUse", "running"),       // ツール実行直前＝待ちではない
-    ("PermissionRequest", "wait"),   // ダイアログ表示中＝人間を待っている
-    ("PostToolUse", "running"),      // ツール成功
-    ("PostToolUseFailure", "running"), // ツール失敗（まだ動いている）
-    ("Stop", "clear"),               // ターン終了
+const CLAUDE_EVENTS: [(&str, &str, &str); 6] = [
+    ("UserPromptSubmit", "running", ""),   // ターン開始
+    ("PreToolUse", "running", ""),         // ツール実行直前
+    ("Notification", "wait", "permission_prompt"), // 承認ダイアログが実際に出た
+    ("PostToolUse", "running", ""),        // ツール成功
+    ("PostToolUseFailure", "running", ""), // ツール失敗（まだ動いている）
+    ("Stop", "clear", ""),                 // ターン終了
 ];
 
 // Codex は PostToolUseFailure を持たない（TUI の /hooks 一覧で確認）。
@@ -160,13 +160,19 @@ fn strip_ztkn_commands(entry: &mut Value) -> bool {
     !hs.is_empty()
 }
 
-fn claude_entry(exe: &Path, action: &str) -> Value {
+fn claude_entry(exe: &Path, action: &str, matcher: &str) -> Value {
     // Claude Code は Windows でも bash 経由で実行するため Git Bash 形式のパスを渡す。
     // パスは必ず二重引用符で囲む。インストール先は既定で C:\Program Files\ZTKN\ であり
     // スペースを含むため、囲まないと bash が空白で分割して /c/Program を実行しようとする
     // （実測で確認済み。開発時のパスにはスペースが無いため気付きにくい）。
     let p = to_git_bash_path(exe);
-    json!({ "hooks": [{ "type": "command", "command": format!("bash -c '\"{p}\" {action}'") }] })
+    let mut e = json!({
+        "hooks": [{ "type": "command", "command": format!("bash -c '\"{p}\" {action}'") }]
+    });
+    if !matcher.is_empty() {
+        e["matcher"] = json!(matcher); // Notification は notification_type で絞る
+    }
+    e
 }
 
 // settings.json に4イベント分を入れる。既存の ZTKN エントリは除去してから足す（冪等）。
@@ -200,7 +206,7 @@ fn write_claude_at(path: &Path, exe: &Path, enable: bool) -> Result<(), String> 
     if !hooks.is_object() {
         return Err("settings.json の hooks が想定の形式ではありません".into());
     }
-    for (event, action) in CLAUDE_EVENTS {
+    for (event, action, matcher) in CLAUDE_EVENTS {
         let list = hooks
             .as_object_mut()
             .unwrap()
@@ -213,7 +219,7 @@ fn write_claude_at(path: &Path, exe: &Path, enable: bool) -> Result<(), String> 
         }
         arr.retain(|e| e["hooks"].as_array().map(|h| !h.is_empty()).unwrap_or(true));
         if enable {
-            arr.push(claude_entry(exe, action));
+            arr.push(claude_entry(exe, action, matcher));
         }
     }
     // 空になったイベントのキーは消す（元から無かった状態に戻す）
@@ -233,7 +239,7 @@ fn claude_is_enabled() -> bool {
     let Ok(v) = serde_json::from_str::<Value>(&txt) else { return false };
     let Some(hooks) = v["hooks"].as_object() else { return false };
     // 4イベント全てに ZTKN エントリがあって初めて「有効」とみなす
-    CLAUDE_EVENTS.iter().all(|(event, _)| {
+    CLAUDE_EVENTS.iter().all(|(event, _, _)| {
         hooks
             .get(*event)
             .and_then(|l| l.as_array())
@@ -465,7 +471,7 @@ mod tests {
 
     #[test]
     fn claude_entry_has_expected_shape() {
-        let e = claude_entry(Path::new(r"C:\ProgramData\ZTKN\ztkn-hook.exe"), "wait");
+        let e = claude_entry(Path::new(r"C:\ProgramData\ZTKN\ztkn-hook.exe"), "wait", "");
         let cmd = e["hooks"][0]["command"].as_str().unwrap();
         assert_eq!(cmd, "bash -c '\"/c/ProgramData/ZTKN/ztkn-hook.exe\" wait'");
         assert_eq!(e["hooks"][0]["type"].as_str().unwrap(), "command");
@@ -475,11 +481,38 @@ mod tests {
     // （実測で確認済み）。開発時のパスにはスペースが無く気付けないので、テストで固定する。
     #[test]
     fn claude_command_quotes_path_with_spaces() {
-        let e = claude_entry(Path::new(r"C:\Program Files\ZTKN\ztkn-hook.exe"), "running");
+        let e = claude_entry(Path::new(r"C:\Program Files\ZTKN\ztkn-hook.exe"), "running", "");
         let cmd = e["hooks"][0]["command"].as_str().unwrap();
         assert_eq!(cmd, "bash -c '\"/c/Program Files/ZTKN/ztkn-hook.exe\" running'");
         // 実行ファイルのパスが引用符で囲まれていること
         assert!(cmd.contains("'\"/c/Program Files/"), "パスが引用されていない: {cmd}");
+    }
+
+    // 承認待ちの判定に PermissionRequest を使うと、自動承認でも発火するため
+    // ツール実行中ずっと「承認待ち」と誤表示される（実測で確認）。
+    // 実際にダイアログが出た時だけ発火する Notification/permission_prompt を使うこと。
+    #[test]
+    fn wait_comes_from_notification_not_permission_request() {
+        let wait_events: Vec<_> = CLAUDE_EVENTS.iter().filter(|(_, a, _)| *a == "wait").collect();
+        assert_eq!(wait_events.len(), 1, "wait を出すイベントは1つだけのはず");
+        let (ev, _, matcher) = wait_events[0];
+        assert_eq!(*ev, "Notification", "wait は Notification から取る");
+        assert_eq!(*matcher, "permission_prompt", "承認ダイアログの種別で絞る");
+        // PermissionRequest は使わない（使うと誤表示になる）
+        assert!(
+            !CLAUDE_EVENTS.iter().any(|(e, _, _)| *e == "PermissionRequest"),
+            "PermissionRequest は自動承認でも発火するため使ってはいけない"
+        );
+    }
+
+    // matcher 付きのエントリが正しい形で出ること
+    #[test]
+    fn notification_entry_has_matcher() {
+        let e = claude_entry(Path::new(r"C:\x\ztkn-hook.exe"), "wait", "permission_prompt");
+        assert_eq!(e["matcher"].as_str().unwrap(), "permission_prompt");
+        // matcher が空なら付けない（他のイベントに余計なキーを足さない）
+        let e2 = claude_entry(Path::new(r"C:\x\ztkn-hook.exe"), "running", "");
+        assert!(e2.get("matcher").is_none(), "matcher が空なのにキーが付いている");
     }
 
     // 同じエントリに利用者のコマンドが同居している場合、それを消さないこと
@@ -506,7 +539,7 @@ mod tests {
 
     #[test]
     fn ztkn_entry_is_detected_by_exe_name() {
-        let mine = claude_entry(Path::new(r"C:\ProgramData\ZTKN\ztkn-hook.exe"), "running");
+        let mine = claude_entry(Path::new(r"C:\ProgramData\ZTKN\ztkn-hook.exe"), "running", "");
         assert!(is_ztkn_entry(&mine));
         let other = json!({ "hooks": [{ "type": "command", "command": "bash -c 'echo hi'" }] });
         assert!(!is_ztkn_entry(&other));
@@ -529,11 +562,11 @@ mod tests {
         // write_claude の中核と同じ手順を再現（ファイルI/Oを挟まず検証する）
         let exe = Path::new(r"C:\ProgramData\ZTKN\ztkn-hook.exe");
         let hooks = root.as_object_mut().unwrap().get_mut("hooks").unwrap();
-        for (event, action) in CLAUDE_EVENTS {
+        for (event, action, matcher) in CLAUDE_EVENTS {
             let list = hooks.as_object_mut().unwrap().entry(event).or_insert_with(|| json!([]));
             let arr = list.as_array_mut().unwrap();
             arr.retain(|e| !is_ztkn_entry(e));
-            arr.push(claude_entry(exe, action));
+            arr.push(claude_entry(exe, action, matcher));
         }
         // 他人のフックが残っていること
         let post = root["hooks"]["PostToolUse"].as_array().unwrap();
@@ -551,7 +584,7 @@ mod tests {
         // 他の設定項目も無傷
         assert_eq!(root["model"].as_str().unwrap(), "opus");
         // ZTKN分が全イベントに入っていること
-        for (event, _) in CLAUDE_EVENTS {
+        for (event, _, _) in CLAUDE_EVENTS {
             assert!(root["hooks"][event].as_array().unwrap().iter().any(is_ztkn_entry), "{event}");
         }
     }
@@ -593,7 +626,7 @@ mod tests {
         write_claude_at(&path, exe, true).unwrap();
         write_claude_at(&path, exe, true).unwrap();
         let v: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
-        for (event, _) in CLAUDE_EVENTS {
+        for (event, _, _) in CLAUDE_EVENTS {
             let n = v["hooks"][event].as_array().unwrap().iter().filter(|e| is_ztkn_entry(e)).count();
             assert_eq!(n, 1, "{event} のZTKNエントリが{n}件");
         }
@@ -795,7 +828,7 @@ command = "my-own-hook"
         write_codex_at(&xp, exe, true).unwrap();
 
         assert_eq!(foreign_of(&cp), before_c, "enableで他人のClaudeフックが変化した");
-        for (event, _) in CLAUDE_EVENTS {
+        for (event, _, _) in CLAUDE_EVENTS {
             let v: Value = serde_json::from_str(&std::fs::read_to_string(&cp).unwrap()).unwrap();
             let n = v["hooks"][event].as_array().unwrap().iter().filter(|e| is_ztkn_entry(e)).count();
             assert_eq!(n, 1, "{event} が {n} 件");
@@ -896,7 +929,7 @@ command = "my-own-hook"
         let a = arr.as_array_mut().unwrap();
         for _ in 0..3 {
             a.retain(|e| !is_ztkn_entry(e));
-            a.push(claude_entry(exe, "running"));
+            a.push(claude_entry(exe, "running", ""));
         }
         assert_eq!(a.len(), 1);
     }
