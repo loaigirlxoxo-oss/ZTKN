@@ -206,19 +206,27 @@ fn write_claude_at(path: &Path, exe: &Path, enable: bool) -> Result<(), String> 
     if !hooks.is_object() {
         return Err("settings.json の hooks が想定の形式ではありません".into());
     }
-    for (event, action, matcher) in CLAUDE_EVENTS {
-        let list = hooks
-            .as_object_mut()
-            .unwrap()
-            .entry(event)
-            .or_insert_with(|| json!([]));
-        let arr = list.as_array_mut().ok_or("hooks の中身が配列ではありません")?;
-        // ZTKN のコマンドだけを抜く。同じエントリに利用者のコマンドがあれば残す。
-        for e in arr.iter_mut() {
-            strip_ztkn_commands(e);
+    // 先に全イベントから ZTKN 分を抜く。CLAUDE_EVENTS に載っているものだけを掃除すると、
+    // 構成から外したイベント（例: PermissionRequest を廃止した時）の古いエントリが
+    // 取り残されて発火し続ける（実際に発生した）。
+    if let Some(map) = hooks.as_object_mut() {
+        for (_, list) in map.iter_mut() {
+            let Some(arr) = list.as_array_mut() else { continue };
+            // ZTKN のコマンドだけを抜く。同じエントリに利用者のコマンドがあれば残す。
+            for e in arr.iter_mut() {
+                strip_ztkn_commands(e);
+            }
+            arr.retain(|e| e["hooks"].as_array().map(|h| !h.is_empty()).unwrap_or(true));
         }
-        arr.retain(|e| e["hooks"].as_array().map(|h| !h.is_empty()).unwrap_or(true));
-        if enable {
+    }
+    if enable {
+        for (event, action, matcher) in CLAUDE_EVENTS {
+            let list = hooks
+                .as_object_mut()
+                .unwrap()
+                .entry(event)
+                .or_insert_with(|| json!([]));
+            let arr = list.as_array_mut().ok_or("hooks の中身が配列ではありません")?;
             arr.push(claude_entry(exe, action, matcher));
         }
     }
@@ -298,22 +306,36 @@ fn write_codex_at(path: &Path, exe: &Path, enable: bool) -> Result<(), String> {
         })
     }
 
-    for (event, action) in CODEX_EVENTS {
-        // [[hooks.<Event>]] は配列テーブル。ZTKN のフック定義だけを抜き、
-        // 同じテーブルに利用者の定義があれば残す（テーブルごと消すと巻き添えになる）。
+    // 先に全イベントから ZTKN 分を抜く。CODEX_EVENTS に載っているものだけを掃除すると、
+    // 構成から外したイベントの古いエントリが取り残されて発火し続ける。
+    let event_names: Vec<String> = hooks.iter().map(|(k, _)| k.to_string()).collect();
+    for name in event_names {
+        let Some(existing) = hooks.get(&name).and_then(|i| i.as_array_of_tables()) else { continue };
         let mut kept = ArrayOfTables::new();
-        if let Some(existing) = hooks.get(event).and_then(|i| i.as_array_of_tables()) {
-            for t in existing.iter() {
-                let mut t = t.clone();
-                if let Some(inner) = t.get_mut("hooks").and_then(|i| i.as_array_of_tables_mut()) {
-                    inner.retain(|h| !is_ztkn_hook(h));
-                    if inner.is_empty() {
-                        continue; // ZTKN のものだけだった＝テーブルごと不要
-                    }
+        for t in existing.iter() {
+            let mut t = t.clone();
+            if let Some(inner) = t.get_mut("hooks").and_then(|i| i.as_array_of_tables_mut()) {
+                inner.retain(|h| !is_ztkn_hook(h));
+                if inner.is_empty() {
+                    continue; // ZTKN のものだけだった＝テーブルごと不要
                 }
-                kept.push(t);
             }
+            kept.push(t);
         }
+        if kept.is_empty() {
+            hooks.remove(&name);
+        } else {
+            hooks.insert(&name, Item::ArrayOfTables(kept));
+        }
+    }
+
+    for (event, action) in CODEX_EVENTS {
+        // 掃除済みの現状を引き継いで、ZTKN 分を足す
+        let mut kept = hooks
+            .get(event)
+            .and_then(|i| i.as_array_of_tables())
+            .cloned()
+            .unwrap_or_default();
         if enable {
             // Codex 自身はコマンドをリテラル文字列(シングルクォート)で書く。
             // 信頼ハッシュが生テキスト基準の場合に記法差で不一致にならないよう合わせる
@@ -503,6 +525,51 @@ mod tests {
             !CLAUDE_EVENTS.iter().any(|(e, _, _)| *e == "PermissionRequest"),
             "PermissionRequest は自動承認でも発火するため使ってはいけない"
         );
+    }
+
+    // 構成から外したイベントに残った古い ZTKN エントリも掃除すること。
+    // CLAUDE_EVENTS に載っているものだけ掃除すると、PermissionRequest を廃止した時に
+    // 古いエントリが残って発火し続ける（実際に発生した）。
+    #[test]
+    fn removes_ztkn_entries_from_events_no_longer_used() {
+        let dir = temp_dir("legacy");
+        let path = dir.join("settings.json");
+        // 旧構成で入っていた PermissionRequest の ZTKN エントリを再現
+        let old = json!({
+            "hooks": {
+                "PermissionRequest": [
+                    { "hooks": [{ "type": "command", "command": "bash -c '\"/c/x/ztkn-hook.exe\" wait'" }] }
+                ],
+                "PreCompact": [
+                    { "hooks": [{ "type": "command", "command": "bash -c 'user-own-hook'" }] }
+                ]
+            }
+        });
+        std::fs::write(&path, serde_json::to_string_pretty(&old).unwrap()).unwrap();
+
+        write_claude_at(&path, Path::new(r"C:\x\ztkn-hook.exe"), true).unwrap();
+        let v: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+
+        // 現構成に無い PermissionRequest から ZTKN 分が消えていること
+        let pr = v["hooks"].get("PermissionRequest");
+        assert!(
+            pr.is_none() || !pr.unwrap().as_array().unwrap().iter().any(is_ztkn_entry),
+            "廃止したイベントに ZTKN エントリが残っている"
+        );
+        // 利用者のフックは無関係なイベントでも残ること
+        assert!(v["hooks"]["PreCompact"].as_array().unwrap().iter().any(|e| e["hooks"][0]
+            ["command"]
+            .as_str()
+            .unwrap()
+            .contains("user-own-hook")));
+        // 現構成のイベントには入っていること
+        for (event, _, _) in CLAUDE_EVENTS {
+            assert!(
+                v["hooks"][event].as_array().unwrap().iter().any(is_ztkn_entry),
+                "{event} に入っていない"
+            );
+        }
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     // matcher 付きのエントリが正しい形で出ること
