@@ -75,9 +75,21 @@ fn main() {
     let file = dir.join(format!("{safe}.json"));
     // running/wait は状態を書き、idle(その他)はファイル削除（＝非アクティブ）。
     // ファイル存在＝アクティブ、status で 実行中/承認待ち を区別する。
+    //
+    // notify: Notification イベント用。stdin の notification_type を見て自分で判断する。
+    // Claude 側の matcher に頼らないのは、matcher を付けると発火しない事例に当たったため。
+    // 承認ダイアログ(permission_prompt)だけを承認待ちにし、それ以外の通知
+    // (idle_prompt=入力待ち, auth_success 等)では状態を変えない。
     let status = match action.as_str() {
         "running" => "running",
         "wait" | "waiting" => "waiting",
+        "notify" => {
+            let kind = v["notification_type"].as_str().unwrap_or("");
+            if kind != "permission_prompt" {
+                return; // 承認以外の通知では何もしない（既存の状態を壊さない）
+            }
+            "waiting"
+        }
         _ => {
             let _ = std::fs::remove_file(&file); // idle/clear/その他
             return;

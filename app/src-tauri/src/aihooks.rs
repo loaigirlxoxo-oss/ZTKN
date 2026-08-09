@@ -16,7 +16,7 @@ use serde_json::{json, Value};
 
 // フックが呼ばれるイベントと ztkn-hook に渡す動作の対応。(イベント名, 動作, matcher)。
 //
-// 承認待ちの判定は Notification(permission_prompt) で行う。PermissionRequest は
+// 承認待ちの判定は Notification の notification_type=permission_prompt で行う。PermissionRequest は
 // 承認の判断が必要になるたびに発火し、設定で自動承認される場合も発火するため、
 // これを wait にすると承認済みでツールを実行している間ずっと誤表示される（実測で確認）。
 // PermissionRequest は running 側に入れて「判断中だがまだ待ちではない」を表す。
@@ -35,7 +35,10 @@ const CLAUDE_EVENTS: [(&str, &str, &str); 7] = [
     ("UserPromptSubmit", "running", ""),   // ターン開始
     ("PreToolUse", "running", ""),         // ツール実行直前
     ("PermissionRequest", "running", ""),  // 承認の判断が要る＝まだ待ちとは限らない
-    ("Notification", "wait", "permission_prompt"), // 承認ダイアログが実際に出た
+    // matcher は付けない。種別の判定はフック側(notify)が stdin の notification_type で行う。
+    // matcher="permission_prompt" を指定すると発火しない事例に当たったため、
+    // Claude 側の matcher 実装に依存しない形にする。
+    ("Notification", "notify", ""),
     ("PostToolUse", "running", ""),        // ツール成功
     ("PostToolUseFailure", "running", ""), // ツール失敗（まだ動いている）
     ("Stop", "clear", ""),                 // ターン終了
@@ -523,17 +526,21 @@ mod tests {
     // 実際にダイアログが出た時だけ発火する Notification/permission_prompt を使うこと。
     #[test]
     fn wait_comes_from_notification_not_permission_request() {
-        let wait_events: Vec<_> = CLAUDE_EVENTS.iter().filter(|(_, a, _)| *a == "wait").collect();
-        assert_eq!(wait_events.len(), 1, "wait を出すイベントは1つだけのはず");
-        let (ev, _, matcher) = wait_events[0];
-        assert_eq!(*ev, "Notification", "wait は Notification から取る");
-        assert_eq!(*matcher, "permission_prompt", "承認ダイアログの種別で絞る");
+        // 承認待ちは Notification から取る。フック側で種別を判定するので action は notify。
+        let n = CLAUDE_EVENTS.iter().find(|(e, _, _)| *e == "Notification").expect("Notification が無い");
+        assert_eq!(n.1, "notify", "種別判定をフック側で行うため notify を渡す");
+        assert_eq!(n.2, "", "matcher は付けない（付けると発火しない事例があった）");
         // PermissionRequest は自動承認でも発火するので wait にしてはいけない。
         // running 側なら入っていてよい（判断中＝まだ待ちではない）。
         let pr = CLAUDE_EVENTS.iter().find(|(e, _, _)| *e == "PermissionRequest");
         if let Some((_, action, _)) = pr {
             assert_eq!(*action, "running", "PermissionRequest を wait にすると誤表示になる");
         }
+        // wait を直接指定するイベントは無い（notify 経由になる）
+        assert!(
+            !CLAUDE_EVENTS.iter().any(|(_, a, _)| *a == "wait"),
+            "承認待ちは notify 経由で判定する"
+        );
     }
 
     // 構成から外したイベントに残った古い ZTKN エントリも掃除すること。
