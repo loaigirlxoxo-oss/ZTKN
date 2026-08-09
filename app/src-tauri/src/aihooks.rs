@@ -16,17 +16,25 @@ use serde_json::{json, Value};
 
 // フックが呼ばれるイベントと ztkn-hook に渡す動作の対応。(イベント名, 動作, matcher)。
 //
-// 承認待ちの判定に PermissionRequest を使ってはいけない。これは承認の判断が必要になる
-// たびに発火し、設定で自動承認される場合も発火する。wait にすると、承認済みで
-// ツールを実行している数十秒〜数分の間ずっと「承認待ち」と誤表示される（実測で確認）。
-// 実際にダイアログが出た時だけ発火するのは Notification の notification_type=permission_prompt。
+// 承認待ちの判定は Notification(permission_prompt) で行う。PermissionRequest は
+// 承認の判断が必要になるたびに発火し、設定で自動承認される場合も発火するため、
+// これを wait にすると承認済みでツールを実行している間ずっと誤表示される（実測で確認）。
+// PermissionRequest は running 側に入れて「判断中だがまだ待ちではない」を表す。
+//
+// ただし Notification には制約がある（いずれも公式Issueで報告済み）:
+//   - ユーザーが6秒以上アイドルでないと発火しない
+//   - 思考中に承認プロンプトが出ると発火しないバージョンがある
+//   - 発生からフック実行まで数秒の遅延がある
+// そのため承認待ちの表示は数秒遅れ、取りこぼす場合もある。誤検出よりは取りこぼしを
+// 選ぶ判断（「実行中なのに承認待ち」が常時出るより、たまに出ないほうが実害が小さい）。
 //
 // ツールが失敗した時は PostToolUse ではなく PostToolUseFailure が発火する。
 // 承認を拒否した場合も PostToolUse は来ない。この2つを拾わないと waiting のまま固まる。
 // PreToolUse も running にすることで、拒否や失敗の後も次のツールで復帰する。
-const CLAUDE_EVENTS: [(&str, &str, &str); 6] = [
+const CLAUDE_EVENTS: [(&str, &str, &str); 7] = [
     ("UserPromptSubmit", "running", ""),   // ターン開始
     ("PreToolUse", "running", ""),         // ツール実行直前
+    ("PermissionRequest", "running", ""),  // 承認の判断が要る＝まだ待ちとは限らない
     ("Notification", "wait", "permission_prompt"), // 承認ダイアログが実際に出た
     ("PostToolUse", "running", ""),        // ツール成功
     ("PostToolUseFailure", "running", ""), // ツール失敗（まだ動いている）
@@ -520,11 +528,12 @@ mod tests {
         let (ev, _, matcher) = wait_events[0];
         assert_eq!(*ev, "Notification", "wait は Notification から取る");
         assert_eq!(*matcher, "permission_prompt", "承認ダイアログの種別で絞る");
-        // PermissionRequest は使わない（使うと誤表示になる）
-        assert!(
-            !CLAUDE_EVENTS.iter().any(|(e, _, _)| *e == "PermissionRequest"),
-            "PermissionRequest は自動承認でも発火するため使ってはいけない"
-        );
+        // PermissionRequest は自動承認でも発火するので wait にしてはいけない。
+        // running 側なら入っていてよい（判断中＝まだ待ちではない）。
+        let pr = CLAUDE_EVENTS.iter().find(|(e, _, _)| *e == "PermissionRequest");
+        if let Some((_, action, _)) = pr {
+            assert_eq!(*action, "running", "PermissionRequest を wait にすると誤表示になる");
+        }
     }
 
     // 構成から外したイベントに残った古い ZTKN エントリも掃除すること。
@@ -534,10 +543,15 @@ mod tests {
     fn removes_ztkn_entries_from_events_no_longer_used() {
         let dir = temp_dir("legacy");
         let path = dir.join("settings.json");
-        // 旧構成で入っていた PermissionRequest の ZTKN エントリを再現
+        // 現構成に無いイベントに ZTKN エントリが残っている状態を再現する
+        let dead_event = "SessionStart";
+        assert!(
+            !CLAUDE_EVENTS.iter().any(|(e, _, _)| *e == dead_event),
+            "テストの前提: {dead_event} は現構成に含まれない"
+        );
         let old = json!({
             "hooks": {
-                "PermissionRequest": [
+                dead_event: [
                     { "hooks": [{ "type": "command", "command": "bash -c '\"/c/x/ztkn-hook.exe\" wait'" }] }
                 ],
                 "PreCompact": [
@@ -550,10 +564,10 @@ mod tests {
         write_claude_at(&path, Path::new(r"C:\x\ztkn-hook.exe"), true).unwrap();
         let v: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
 
-        // 現構成に無い PermissionRequest から ZTKN 分が消えていること
-        let pr = v["hooks"].get("PermissionRequest");
+        // 現構成に無いイベントから ZTKN 分が消えていること
+        let dead = v["hooks"].get(dead_event);
         assert!(
-            pr.is_none() || !pr.unwrap().as_array().unwrap().iter().any(is_ztkn_entry),
+            dead.is_none() || !dead.unwrap().as_array().unwrap().iter().any(is_ztkn_entry),
             "廃止したイベントに ZTKN エントリが残っている"
         );
         // 利用者のフックは無関係なイベントでも残ること
