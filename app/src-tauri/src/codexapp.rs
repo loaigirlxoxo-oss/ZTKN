@@ -92,12 +92,15 @@ fn iso_to_secs(s: &str) -> u64 {
 }
 
 // 1つの記録ファイルを読み、実行中ならセッション情報を返す。
-// 判定: task_started の数 > task_complete の数。
+//
+// 判定は「時系列で最後のターンイベントが task_started か」で行う。
+// 件数の比較（started > completed）にすると、中断などで完了イベントを持たない
+// 過去ターンが1つでもあると、以後ずっと実行中と誤判定される:
+//   start A / start B / complete B  → アイドルなのに 2 > 1 で実行中になる
 pub fn parse_rollout(text: &str) -> Option<AppThread> {
     let mut session_id = String::new();
     let mut cwd = String::new();
-    let mut started = 0usize;
-    let mut completed = 0usize;
+    let mut last_is_start = false; // 最後のターンイベントが開始だったか
     let mut last_start = 0u64;
 
     for line in text.lines() {
@@ -114,16 +117,16 @@ pub fn parse_rollout(text: &str) -> Option<AppThread> {
             }
             Some("event_msg") => match v["payload"]["type"].as_str() {
                 Some("task_started") => {
-                    started += 1;
+                    last_is_start = true;
                     last_start = v["timestamp"].as_str().map(iso_to_secs).unwrap_or(last_start);
                 }
-                Some("task_complete") => completed += 1,
+                Some("task_complete") => last_is_start = false,
                 _ => {}
             },
             _ => {}
         }
     }
-    if started > completed && !session_id.is_empty() {
+    if last_is_start && !session_id.is_empty() {
         Some(AppThread { session_id, cwd, since: last_start })
     } else {
         None
@@ -193,6 +196,35 @@ mod tests {
         let t = parse_rollout(&txt).expect("最後のターンが実行中");
         // since は最後の task_started
         assert_eq!(t.since, iso_to_secs("2026-08-02T03:20:00.000Z"));
+    }
+
+    // 中断で完了イベントを欠いたターンがあっても、その後に完了していればアイドル。
+    // 件数比較(started > completed)で判定すると、ここが永久に実行中になる。
+    #[test]
+    fn interrupted_past_turn_does_not_stick_as_running() {
+        let txt = format!(
+            "{META}\n{}\n{}\n{}\n",
+            ev("task_started", "2026-08-02T03:00:00.000Z"), // 中断され complete が無い
+            ev("task_started", "2026-08-02T03:10:00.000Z"),
+            ev("task_complete", "2026-08-02T03:10:30.000Z")
+        );
+        assert!(
+            parse_rollout(&txt).is_none(),
+            "最後のターンは完了しているのに実行中と判定された"
+        );
+    }
+
+    // 逆に、完了済みターンの後に新しく始まったターンは実行中
+    #[test]
+    fn new_turn_after_completed_is_running() {
+        let txt = format!(
+            "{META}\n{}\n{}\n{}\n",
+            ev("task_started", "2026-08-02T03:00:00.000Z"),
+            ev("task_complete", "2026-08-02T03:00:30.000Z"),
+            ev("task_started", "2026-08-02T03:10:00.000Z")
+        );
+        let t = parse_rollout(&txt).expect("最後のターンが実行中");
+        assert_eq!(t.since, iso_to_secs("2026-08-02T03:10:00.000Z"));
     }
 
     #[test]
