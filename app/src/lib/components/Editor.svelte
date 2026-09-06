@@ -31,6 +31,19 @@
   }
   refreshSavedList();
 
+  // センサーの読み直し。サイドカーを終了させ、アプリ側の監視ループが起動し直す。
+  // ドライバのリセットやスリープ復帰でハードウェアが読めなくなると値が0のまま戻らないため。
+  async function restartSensors(): Promise<void> {
+    msg = "センサーを読み直しています…";
+    try {
+      await invoke("restart_sensor_sidecar");
+      msg = "センサーを読み直しました";
+    } catch (e) {
+      msg = `センサーの読み直しに失敗: ${e}`;
+    }
+    setTimeout(() => { msg = ""; }, 4000);
+  }
+
   function loadTemplate(i: number): void {
     const t = templates[i];
     if (!t) return;
@@ -195,6 +208,8 @@
     </span>
     <span class="sep">|</span>
     <span class="sensor-status">🌡 {sensors.status}</span>
+    <button class="mini" title="センサーを読み直す（GPU等の値が0のまま戻らない時に使う。ドライバのリセットやスリープ復帰でハードウェアが読めなくなることがある）"
+      onclick={restartSensors}>♻</button>
     <button class="mini" title="センサーカタログを掃除（旧センサーを消して作り直す）" onclick={() => sensors.clearCatalog()}>🗑</button>
     <span class="msg">{msg}</span>
   </div>

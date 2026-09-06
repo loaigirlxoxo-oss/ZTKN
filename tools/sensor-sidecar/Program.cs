@@ -9,6 +9,13 @@ using LibreHardwareMonitor.Hardware;
 var stdout = new StreamWriter(Console.OpenStandardOutput(), new UTF8Encoding(false)) { AutoFlush = false };
 int intervalMs = args.Length > 0 && int.TryParse(args[0], out var ms) && ms >= 100 ? ms : 500;
 
+// GPU のハンドルはドライバのリセット・TDR・スリープ復帰で無効になることがあり、
+// その後は Update() が成功しても値が 0 のまま返り続ける（実機で発生）。
+// 復旧はこのプロセスを起動し直すことで行う（ZTKN 側の「センサー再起動」ボタン）。
+//
+// 自動検出はしない。「壊れている」の判定を値から推測しようとすると、
+// 未使用の Wi-Fi や仮想スイッチなど平常時から全センサーが 0 のデバイス（実機で32個）を
+// 誤って故障と判定し、再初期化を繰り返す。
 var computer = new Computer
 {
     IsCpuEnabled = true, IsGpuEnabled = true, IsMemoryEnabled = true,
@@ -74,7 +81,11 @@ class UpdateVisitor : IVisitor
     public void VisitComputer(IComputer computer) => computer.Traverse(this);
     public void VisitHardware(IHardware hardware)
     {
-        hardware.Update();
+        // 1つのデバイスの読み取り失敗で全センサーが止まらないようにする。
+        // ドライバのリセット中などに例外が飛ぶことがあるが、他のデバイスは読めるので続行する。
+        // 恒常的に読めなくなった場合は呼び出し側が検出して再初期化する。
+        try { hardware.Update(); }
+        catch (Exception e) { Console.Error.WriteLine($"[sensor-sidecar] {hardware.Name} の読み取りに失敗: {e.Message}"); }
         foreach (var sub in hardware.SubHardware) sub.Accept(this);
     }
     public void VisitSensor(ISensor sensor) { }

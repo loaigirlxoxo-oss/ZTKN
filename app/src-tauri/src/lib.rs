@@ -23,6 +23,11 @@ fn sidecar_path(app: &AppHandle) -> PathBuf {
     p
 }
 
+// 起動中のサイドカーの PID。再起動ボタンから止めるために保持する。
+// GPU のハンドルはドライバのリセットやスリープ復帰で無効になることがあり、その後は
+// 値が 0 のまま返り続ける。復旧手段はプロセスの起動し直しだけなので、手動で行えるようにする。
+static SIDECAR_PID: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+
 // サイドカーを子プロセスとして起動し、stdout の JSON 行を "sensors" イベントで
 // フロントへ転送する。プロセスが落ちたら指数バックオフで再起動する（握りつぶさず通知）。
 fn start_sensor_sidecar(app: AppHandle) {
@@ -40,6 +45,7 @@ fn start_sensor_sidecar(app: AppHandle) {
             match cmd.spawn() {
                 Ok(mut child) => {
                     backoff = 1;
+                    SIDECAR_PID.store(child.id(), std::sync::atomic::Ordering::Relaxed);
                     let _ = app.emit("sensor-status", "connected");
                     if let Some(out) = child.stdout.take() {
                         for line in BufReader::new(out).lines() {
@@ -53,6 +59,7 @@ fn start_sensor_sidecar(app: AppHandle) {
                         }
                     }
                     let _ = child.wait();
+                    SIDECAR_PID.store(0, std::sync::atomic::Ordering::Relaxed);
                     let _ = app.emit("sensor-status", "disconnected");
                 }
                 Err(e) => {
@@ -63,6 +70,29 @@ fn start_sensor_sidecar(app: AppHandle) {
             backoff = (backoff * 2).min(30);
         }
     });
+}
+
+// センサーを読み直す。サイドカーを終了させるだけで、上のループが自動で起動し直す。
+// 自分が起動した子プロセスの PID だけを対象にする。
+#[tauri::command]
+fn restart_sensor_sidecar() -> Result<(), String> {
+    let pid = SIDECAR_PID.load(std::sync::atomic::Ordering::Relaxed);
+    if pid == 0 {
+        return Err("センサーが起動していません（まもなく自動で起動します）".into());
+    }
+    let mut cmd = Command::new("taskkill");
+    cmd.args(["/PID", &pid.to_string(), "/F"]).stdout(Stdio::null()).stderr(Stdio::piped());
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x08000000);
+    }
+    let out = cmd.output().map_err(|e| format!("停止に失敗: {e}"))?;
+    if out.status.success() {
+        Ok(())
+    } else {
+        Err(String::from_utf8_lossy(&out.stderr).trim().to_string())
+    }
 }
 
 // 保存パネルの置き場。Assets/image と同じ規約でアプリ基準に置く
@@ -586,7 +616,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             save_panel, load_panel, list_panels,
             assets_root, open_assets_dir, list_asset_sets, list_fonts, list_images, open_images_dir,
-            get_claude_usage_event, get_agent_alerts, ai_hooks_status, set_ai_hooks
+            get_claude_usage_event, get_agent_alerts, ai_hooks_status, set_ai_hooks,
+            restart_sensor_sidecar
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
