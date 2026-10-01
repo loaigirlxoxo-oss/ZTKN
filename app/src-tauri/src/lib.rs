@@ -37,6 +37,8 @@ fn start_sensor_sidecar(app: AppHandle) {
         let mut backoff = 1u64;
         loop {
             let mut cmd = Command::new(&path);
+            // 第2引数は PC 全体の電力推定に使う部品構成（無ければサイドカーが既定値を使う）。
+            cmd.arg("500").arg(pc_profile_path());
             cmd.stdout(Stdio::piped()).stderr(Stdio::null());
             #[cfg(windows)]
             {
@@ -94,6 +96,14 @@ fn restart_sensor_sidecar() -> Result<(), String> {
     } else {
         Err(String::from_utf8_lossy(&out.stderr).trim().to_string())
     }
+}
+
+// PC 固有の部品構成（電力推定用）。Panels と同じくアプリ基準に置く（debug=app/, 製品=exe と同じ場所）。
+fn pc_profile_path() -> PathBuf {
+    let mut d = assets_dir();
+    d.pop();
+    d.push("pc-profile.json");
+    d
 }
 
 // 保存パネルの置き場。Assets/image と同じ規約でアプリ基準に置く

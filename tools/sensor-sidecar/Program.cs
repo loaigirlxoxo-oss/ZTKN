@@ -4,7 +4,8 @@ using LibreHardwareMonitor.Hardware;
 
 // 一定間隔(既定0.5秒)で全センサー値を JSON 1行で stdout へ出力するサイドカー。
 // センサー源は LibreHardwareMonitor（CPU温度・GPU・メモリ・ネット等すべてLHMで取得）。
-// Tauri(Rust) が stdout を読みフロントへ転送する。第1引数=送出間隔ms(100以上、既定500)。
+// Tauri(Rust) が stdout を読みフロントへ転送する。
+// 第1引数=送出間隔ms(100以上、既定500)、第2引数=pc-profile.json のパス(省略可。PC全体の電力推定に使う)。
 
 var stdout = new StreamWriter(Console.OpenStandardOutput(), new UTF8Encoding(false)) { AutoFlush = false };
 int intervalMs = args.Length > 0 && int.TryParse(args[0], out var ms) && ms >= 100 ? ms : 500;
@@ -27,22 +28,34 @@ var visitor = new UpdateVisitor();
 // NVML は先頭の NVIDIA GPU しか見ないので、NVIDIA が1枚のときだけ推定を使う。
 var gpuEstimator = computer.Hardware.Count(h => h.HardwareType == HardwareType.GpuNvidia) == 1
     ? GpuPowerEstimator.TryCreate() : null;
+var systemEstimator = SystemPowerEstimator.Load(args.Length > 1 ? args[1] : null);
 
 while (true)
 {
     computer.Accept(visitor);
     var sensors = new List<SensorDto>();
     var used = new HashSet<string>();
+    float? dgpuW = null;   // 単体 GPU の電力（実測があれば実測、無ければ推定）。PC 全体の推定に使う
     foreach (var hw in computer.Hardware)
     {
         CollectLhm(hw, sensors, used);
-        if (gpuEstimator != null && hw.HardwareType == HardwareType.GpuNvidia && !HasPower(hw)
+        if (hw.HardwareType is HardwareType.GpuNvidia or HardwareType.GpuAmd && PowerOf(hw) is float real)
+            dgpuW = (dgpuW ?? 0f) + real;
+        else if (gpuEstimator != null && hw.HardwareType == HardwareType.GpuNvidia
             && gpuEstimator.Estimate(hw) is float est)
         {
+            dgpuW = (dgpuW ?? 0f) + est;
             string id = $"{hw.Name}|{GpuPowerEstimator.SensorName}|Power";
             if (used.Add(id)) sensors.Add(new SensorDto(id, GpuPowerEstimator.SensorName, hw.Name, "Power", est, "W"));
         }
     }
+    // PC 全体（コンセント側）の推定と内訳。内蔵 GPU は CPU Package に含まれるので足さない。
+    if (systemEstimator.Estimate(computer.Hardware, dgpuW) is { } parts)
+        foreach (var (name, watts) in parts)
+        {
+            string id = $"PC|{name}|Power";
+            if (used.Add(id)) sensors.Add(new SensorDto(id, name, "PC", "Power", watts, "W"));
+        }
     stdout.WriteLine(JsonSerializer.Serialize(new Payload("LHM", sensors)));
     stdout.Flush();
     Thread.Sleep(intervalMs);
@@ -66,9 +79,14 @@ static void CollectLhm(IHardware hw, List<SensorDto> outList, HashSet<string> us
     foreach (var sub in hw.SubHardware) CollectLhm(sub, outList, usedIds);
 }
 
-// ドライバが電力を返す GPU では推定を出さない（本物の値と二重になる）。
-static bool HasPower(IHardware hw) =>
-    hw.Sensors.Any(s => s.SensorType == SensorType.Power && s.Value is float v && float.IsFinite(v));
+// GPU の実測電力。ドライバが電力を返す GPU では推定を出さない（本物の値と二重になる）。
+static float? PowerOf(IHardware hw)
+{
+    foreach (var s in hw.Sensors)
+        if (s.SensorType == SensorType.Power && s.Name is "GPU Package" or "GPU Power"
+            && s.Value is float v && float.IsFinite(v)) return v;
+    return null;
+}
 
 static string UnitForLhm(SensorType t) => t switch
 {
