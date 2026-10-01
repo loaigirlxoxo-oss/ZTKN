@@ -4,6 +4,7 @@ use std::process::{Command, Stdio};
 use tauri::{AppHandle, Emitter, Manager};
 
 mod aihooks; // Claude/Codex のフック設定の導入・削除
+mod audio; // 出力音声のループバック取り込み(VUメーター用)
 mod codexapp; // Codex アプリ(フック非対応)の実行中をセッション記録から検出
 mod usage; // AI使用量(プラン残量%・5h/7d枠)の取得
 
@@ -617,7 +618,8 @@ pub fn run() {
             save_panel, load_panel, list_panels,
             assets_root, open_assets_dir, list_asset_sets, list_fonts, list_images, open_images_dir,
             get_claude_usage_event, get_agent_alerts, ai_hooks_status, set_ai_hooks,
-            restart_sensor_sidecar
+            restart_sensor_sidecar,
+            audio::audio_start, audio::audio_stop, audio::audio_status
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
