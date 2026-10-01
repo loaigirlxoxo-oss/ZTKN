@@ -24,3 +24,20 @@ export function loadImage(path: string): Promise<HTMLImageElement> {
   }
   return p;
 }
+
+// 同梱の静的画像（/vu/... など）。convertFileSrc を通さずそのまま読む。
+export function loadUrl(url: string): Promise<HTMLImageElement> {
+  const cached = cache.get(url);
+  if (cached) return Promise.resolve(cached);
+  let p = loading.get(url);
+  if (!p) {
+    p = new Promise<HTMLImageElement>((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => { cache.set(url, img); loading.delete(url); resolve(img); };
+      img.onerror = (e) => { loading.delete(url); reject(e); };
+      img.src = url;
+    });
+    loading.set(url, p);
+  }
+  return p;
+}

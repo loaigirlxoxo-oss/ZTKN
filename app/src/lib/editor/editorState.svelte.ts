@@ -1,3 +1,4 @@
+import { migrateItem } from "$lib/model/panel";
 import { createPanel, createItem, type Panel, type PanelItem, type ItemKind } from "$lib/model/panel";
 
 // Svelte5 runes を使うアプリ全体の編集状態（単一の真実）
@@ -146,7 +147,8 @@ class EditorState {
   }
 
   replacePanel(panel: Panel): void {
-    this.panel = panel;
+    // 旧 "VuMeter" を含む保存データをここで吸収する（読み込み経路は replacePanel 一本）。
+    this.panel = { ...panel, items: (panel.items ?? []).map(migrateItem) };
     this.selectedId = null;
     this.bumpStructure();
   }

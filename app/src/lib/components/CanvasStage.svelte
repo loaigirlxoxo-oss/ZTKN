@@ -11,6 +11,15 @@
   import { valueToFraction } from "$lib/render/gauge";
   import { historyToPoints, graphScale, autoRateUnit } from "$lib/render/graph";
   import { getImage, loadImage } from "$lib/render/images";
+  import { getImage as _gi, loadUrl } from "$lib/render/images";
+  import { audio } from "$lib/sensors/audio.svelte";
+  import {
+    VU_VARIANTS, VU_DEFAULTS, buildScale, buildCracks, buildGrime, drawVu,
+    Ballistics, rmsToPos, type VuVariant, type VuLayers, type VuSettings,
+  } from "$lib/render/vumeter";
+  import {
+    WAVE_DEFAULTS, WaveState, drawWave, type WaveSettings, type WaveDesign, type Scheme,
+  } from "$lib/render/visualizers";
 
   // present=表示専用（ドラッグ/選択/Transformer無効・ウィンドウにフィット）
   let { present = false }: { present?: boolean } = $props();
@@ -61,6 +70,12 @@
   const groups = new Map<string, Konva.Group>();
   const outlines = new Map<string, Konva.Rect>(); // 複数選択時に各オブジェクトへ出す点線枠
   const updaters = new Map<string, (v: number) => void>(); // 値だけ更新する関数
+  // VUメーターの実行時状態。音声の取り込みは参照数で管理し、0 になったら止める。
+  type VuRt = { v: VuVariant; cfg: VuSettings; bal: [Ballistics, Ballistics]; layers?: VuLayers; release: () => void };
+  type WaveRt = { st: WaveState; release: () => void };
+  const vuRt = new Map<string, VuRt>();
+  const waveRt = new Map<string, WaveRt>();
+  let vuAnim: Konva.Animation | undefined;
 
   // フォント名を引用符で囲む。数字始まり("851ゴチカクット"等)や特殊名は無引用だと
   // ctx.font が無効になり描画されない。Konva はスペース有りしか引用しないため自前で囲む。
@@ -332,6 +347,62 @@
         // 未割当の画像はエディタで見えるようプレースホルダ（表示専用では何も出さない）
         g.add(new Konva.Rect({ width: item.rect.w, height: item.rect.h, stroke: "#5a5a5a", strokeWidth: 1, dash: [5, 4], fill: "rgba(255,255,255,0.04)" }));
         g.add(new Konva.Text({ text: "🖼 画像未選択", x: 0, y: item.rect.h / 2 - 8, width: item.rect.w, align: "center", fontSize: 12, fill: "#888" }));
+      }
+    } else if (item.kind === "Wave") {
+      // 音声ビジュアライザ。値はセンサーではなく出力音声のループバックから取る。
+      const wcfg: WaveSettings = { ...WAVE_DEFAULTS, ...(item.wave ?? {}),
+        design: ((item.wave?.design ?? WAVE_DEFAULTS.design) as WaveDesign),
+        scheme: ((item.wave?.scheme ?? WAVE_DEFAULTS.scheme) as Scheme) };
+      const w = item.rect.w, h = item.rect.h;
+      if (wcfg.design === "vu") {
+        const cfg: VuSettings = { ...VU_DEFAULTS, ...(item.wave?.vu ?? {}) };
+        const v = VU_VARIANTS[cfg.variant] ?? VU_VARIANTS.ussr;
+        const rt: VuRt = { v, cfg, bal: [new Ballistics(), new Ballistics()], release: audio.acquire() };
+        vuRt.set(item.id, rt);
+        Promise.all([loadUrl(v.src.bezel), loadUrl(v.src.paper), loadUrl(v.src.glass)])
+          .then(([bezel, paper, glass]) => {
+            rt.layers = { bezel, paper, glass, scale: buildScale(v), cracks: buildCracks(v), grime: buildGrime(v, glass) };
+            layer.batchDraw();
+          })
+          .catch((e) => console.error("[vu] 素材の読み込みに失敗", e));
+        g.add(new Konva.Shape({
+          width: w, height: h,
+          sceneFunc: (c) => {
+            const x = (c as unknown as { _context: CanvasRenderingContext2D })._context;
+            if (!rt.layers) { placeholder(x, w, h, "🔊 素材を読み込み中…"); return; }
+            const now = performance.now();
+            const tl = rmsToPos(audio.level.l, rt.cfg.refDb);
+            const tr = rmsToPos(audio.level.r, rt.cfg.refDb);
+            x.save();
+            x.scale(w / v.panel[0], h / v.panel[1]);
+            drawVu(x, v, rt.layers, rt.cfg, [
+              rt.bal[0].step(tl, rt.cfg.weight, now),
+              rt.bal[1].step(tr, rt.cfg.weight, now),
+            ]);
+            x.restore();
+          },
+          hitFunc: (c, sh) => { c.beginPath(); c.rect(0, 0, w, h); c.closePath(); c.fillStrokeShape(sh); },
+        }));
+      } else {
+        const rt: WaveRt = { st: new WaveState(), release: audio.acquire() };
+        waveRt.set(item.id, rt);
+        g.add(new Konva.Shape({
+          width: w, height: h,
+          sceneFunc: (c) => {
+            const x = (c as unknown as { _context: CanvasRenderingContext2D })._context;
+            rt.st.update(audio.level, wcfg, performance.now());
+            const cv = drawWave(rt.st, wcfg, w, h);
+            if (cv) x.drawImage(cv, 0, 0, w, h);
+            else placeholder(x, w, h, "🔊 未対応の意匠");
+            // 音が来ていないと棒が0で真っ黒の箱にしか見えない。編集中だけ理由を出す。
+            if (!audio.level.bands.length) {
+              placeholder(x, w, h, audio.paused ? "🔇 音声取り込みが停止中"
+                : audio.status.error ? "⚠ " + audio.status.error
+                : audio.status.running ? "🔊 無音（音を鳴らすと動きます）" : "🔊 音声の取り込みを待っています…");
+            }
+          },
+          hitFunc: (c, sh) => { c.beginPath(); c.rect(0, 0, w, h); c.closePath(); c.fillStrokeShape(sh); },
+        }));
       }
     } else if (item.kind === "Gauge" && item.gauge?.mode === "StateFrames") {
       const [min, max] = item.range ?? [0, 100];
@@ -610,8 +681,20 @@
       .then(() => { if (seq === fontLoadSeq) layer.batchDraw(); });
   }
 
+  // 素材待ち・未対応のときに出す枠。表示専用では描かない。
+  function placeholder(x: CanvasRenderingContext2D, w: number, h: number, text: string): void {
+    if (present) return;
+    x.fillStyle = "rgba(255,255,255,0.04)"; x.fillRect(0, 0, w, h);
+    x.strokeStyle = "#5a5a5a"; x.setLineDash([5, 4]); x.strokeRect(0.5, 0.5, w - 1, h - 1); x.setLineDash([]);
+    x.fillStyle = "#888"; x.font = "12px sans-serif"; x.textAlign = "center"; x.textBaseline = "middle";
+    x.fillText(text, w / 2, h / 2);
+  }
+
   function rebuild(): void {
     groups.clear(); updaters.clear();
+    for (const r of vuRt.values()) r.release();   // 先に音声の参照を返す
+    for (const r of waveRt.values()) r.release();
+    vuRt.clear(); waveRt.clear();
     layer.destroyChildren();
     // 背景画像（最下層・選択対象外）
     const bgPath = editor.panel.background;
@@ -624,6 +707,13 @@
       const g = buildNode(item);
       groups.set(item.id, g);
       layer.add(g);
+    }
+    // 音声ビジュアライザは常時動くので、1つでもあればレイヤーのアニメーションを回す。
+    if (vuRt.size > 0 || waveRt.size > 0) {
+      if (!vuAnim) vuAnim = new Konva.Animation(() => {}, layer);
+      vuAnim.start();
+    } else {
+      vuAnim?.stop();
     }
     // Transformer は最前面（ハンドルがアイテムに隠れないように）。表示専用では作らない
     if (!present) {

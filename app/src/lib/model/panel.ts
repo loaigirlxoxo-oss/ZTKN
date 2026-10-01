@@ -1,4 +1,33 @@
-export type ItemKind = "Label" | "SensorText" | "Gauge" | "GraphLine" | "BarH" | "BarV" | "Image" | "DateTime" | "Box" | "Line" | "AlertList";
+export type ItemKind = "Label" | "SensorText" | "Gauge" | "GraphLine" | "BarH" | "BarV" | "Image" | "DateTime" | "Box" | "Line" | "AlertList" | "Wave";
+
+// 音声ビジュアライザ。値はセンサーではなく出力音声のループバックから取る。
+// 意匠は design で切り替える。VUメーターもそのひとつ。
+export interface WaveConfig {
+  design: string;     // bars-solid / terrain / vu など
+  scheme: string;     // 配色
+  smooth: number;     // 落ちの粘り 0..1
+  glow: number;       // グロー 0..34
+  trail: number;      // 残像 0..1
+  bands: number;      // 帯数 8..64
+  gain: number;       // 感度
+  gap: number;        // バー間隔 px
+  peak: boolean;      // ピーク保持線
+  bg: boolean;        // 背景を塗る（falseで透過）
+  vu: VuMeterConfig;  // design="vu" のときだけ使う
+}
+
+// アナログVUメーターの素材と演出。
+export interface VuMeterConfig {
+  variant: string;    // 国別の素材一式（ussr / us / jp）
+  lamp: number;       // バックライトの強さ 0..1.5
+  glass: number;      // ガラスの映り込み 0..1.5
+  grime: number;      // 汚れ 0..1.5
+  cracks: number;     // 割れ 0..1.5
+  shadow: number;     // 枠の影 0..1.5
+  weight: number;     // 針の重さ。1=VU規格の300ms
+  refDb: number;      // 0VU とみなす dBFS
+  label: boolean;     // 文字板の表記を描くか
+}
 
 export interface Rect { x: number; y: number; w: number; h: number; }
 
@@ -74,6 +103,7 @@ export interface PanelItem {
   cropRight?: number;
   cropTop?: number;
   cropBottom?: number;
+  wave?: WaveConfig;          // Wave の設定
 }
 
 export interface Panel {
@@ -112,8 +142,26 @@ export function createItem(kind: ItemKind, pos: { x: number; y: number }): Panel
   if (kind === "BarH") { base.rect.w = 160; base.rect.h = 24; base.range = [0, 100]; base.bgColor = "#333333"; base.bgOpacity = 1; base.frameColor = "#555555"; base.frameOpacity = 1; base.useGradient = false; base.gradColor = "#ff3333"; }
   if (kind === "BarV") { base.rect.w = 24; base.rect.h = 120; base.range = [0, 100]; base.bgColor = "#333333"; base.bgOpacity = 1; base.frameColor = "#555555"; base.frameOpacity = 1; base.useGradient = false; base.gradColor = "#ff3333"; }
   // 承認待ちのフォルダ一覧を表示する部品（可変テキスト。中身は agentAlerts ストアから）
+  // 音声ビジュアライザ。既定は棒。VUメーターは枠込みの絵なので、
+  // design を vu にしたときだけ横長（素材は 2048x756 = 2.71:1）に寄せる。
+  if (kind === "Wave") {
+    base.rect.w = 320; base.rect.h = 120;
+    base.wave = {
+      design: "bars-solid", scheme: "cyber", smooth: 0.7, glow: 12, trail: 0.55,
+      bands: 40, gain: 1, gap: 2, peak: true, bg: false,
+      vu: { variant: "ussr", lamp: 0.55, glass: 0.16, grime: 0.45, cracks: 0.7, shadow: 0.45, weight: 1, refDb: -18, label: true },
+    };
+  }
   if (kind === "AlertList") { base.rect.w = 300; base.rect.h = 120; base.style.fontSize = 16; base.style.color = "#ff6b6b"; }
   return base;
+}
+
+// 旧 "VuMeter" 部品を Wave へ寄せる。design を持たない保存データが読めなくなるのを防ぐ。
+export function migrateItem(raw: PanelItem & { vu?: VuMeterConfig }): PanelItem {
+  if ((raw.kind as string) !== "VuMeter") return raw;
+  const vu = raw.vu ?? createItem("Wave", { x: 0, y: 0 }).wave!.vu;
+  const base = createItem("Wave", { x: 0, y: 0 }).wave!;
+  return { ...raw, kind: "Wave", wave: { ...base, design: "vu", vu } };
 }
 
 export function createPanel(w: number, h: number): Panel {

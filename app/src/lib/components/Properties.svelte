@@ -1,5 +1,10 @@
 <script lang="ts">
   import { editor } from "$lib/editor/editorState.svelte";
+  import type { PanelItem, WaveConfig } from "$lib/model/panel";
+  import { createItem } from "$lib/model/panel";
+  import { VU_VARIANTS } from "$lib/render/vumeter";
+  import { DESIGN_LABELS, SCHEME_LABELS, type WaveDesign, type Scheme } from "$lib/render/visualizers";
+  import { audio } from "$lib/sensors/audio.svelte";
   import { sensors, type LiveSensor } from "$lib/sensors/live.svelte";
   import { pickLhm } from "$lib/sensors/match";
   import { formatForUnit } from "$lib/render/format";
@@ -38,6 +43,22 @@
   function changed(): void {
     editor.bumpStructure();
   }
+
+  // 旧パネルには wave が無いので、開いた時に createItem の既定で埋める。
+  // 描画中に状態を書き換えると Svelte 5 は例外で止まる（state_unsafe_mutation）。
+  // 読むときは既定値を返すだけにして、書き換えはイベントの中（editWave）でだけ行う。
+  const DEFAULT_WAVE: WaveConfig = createItem("Wave", { x: 0, y: 0 }).wave as WaveConfig;
+  function waveCfg(it: PanelItem): WaveConfig {
+    return it.wave ?? DEFAULT_WAVE;
+  }
+  function editWave(it: PanelItem, f: (w: WaveConfig) => void): void {
+    if (!it.wave) it.wave = structuredClone(DEFAULT_WAVE);
+    f(it.wave);
+    changed();
+  }
+  const VU_LIST = Object.values(VU_VARIANTS);
+  const DESIGNS = Object.entries(DESIGN_LABELS) as [WaveDesign, string][];
+  const SCHEMES_L = Object.entries(SCHEME_LABELS) as [Scheme, string][];
 
   // 合算センサー「Total Power（CPU+GPU）」を表す特別な選択肢の値。実センサーIDと衝突しない。
   const SUM_POWER = "__sum_power__";
@@ -229,6 +250,81 @@
           <option value="codex">Codexのみ</option>
         </select>
       </label>
+    {:else if item.kind === "Wave"}
+      <!-- 値はセンサーではなく出力音声のループバックから取るので、センサー選択は出さない -->
+      <label>デザイン
+        <select value={waveCfg(item).design}
+                onchange={(e) => { const v = e.currentTarget.value; editWave(item, (w) => { w.design = v; }); }}>
+          {#each DESIGNS as [id, label]}<option value={id}>{label}</option>{/each}
+        </select>
+      </label>
+      {#if waveCfg(item).design === "vu"}
+        <label>種類
+          <select value={waveCfg(item).vu.variant}
+                  onchange={(e) => { const v = e.currentTarget.value; editWave(item, (w) => { w.vu.variant = v; }); }}>
+            {#each VU_LIST as v}<option value={v.id}>{v.label}</option>{/each}
+          </select>
+        </label>
+        <label>0VU とみなす音量 (dBFS)
+          <input type="number" min="-40" max="0" step="1" value={waveCfg(item).vu.refDb}
+                 oninput={(e) => { const v = +e.currentTarget.value; editWave(item, (w) => { w.vu.refDb = v; }); }} />
+        </label>
+        <label>針の重さ <input type="range" min="0.4" max="2.6" step="0.1" value={waveCfg(item).vu.weight}
+          oninput={(e) => { const v = +e.currentTarget.value; editWave(item, (w) => { w.vu.weight = v; }); }} /></label>
+        <label>バックライト <input type="range" min="0" max="1.5" step="0.05" value={waveCfg(item).vu.lamp}
+          oninput={(e) => { const v = +e.currentTarget.value; editWave(item, (w) => { w.vu.lamp = v; }); }} /></label>
+        <label>枠の影 <input type="range" min="0" max="1.5" step="0.05" value={waveCfg(item).vu.shadow}
+          oninput={(e) => { const v = +e.currentTarget.value; editWave(item, (w) => { w.vu.shadow = v; }); }} /></label>
+        <label>汚れ <input type="range" min="0" max="1.5" step="0.05" value={waveCfg(item).vu.grime}
+          oninput={(e) => { const v = +e.currentTarget.value; editWave(item, (w) => { w.vu.grime = v; }); }} /></label>
+        <label>割れ <input type="range" min="0" max="1.5" step="0.05" value={waveCfg(item).vu.cracks}
+          oninput={(e) => { const v = +e.currentTarget.value; editWave(item, (w) => { w.vu.cracks = v; }); }} /></label>
+        <label>ガラスの映り込み <input type="range" min="0" max="1.5" step="0.05" value={waveCfg(item).vu.glass}
+          oninput={(e) => { const v = +e.currentTarget.value; editWave(item, (w) => { w.vu.glass = v; }); }} /></label>
+        <label>文字板の表記 <input type="checkbox" checked={waveCfg(item).vu.label}
+          onchange={(e) => { const v = e.currentTarget.checked; editWave(item, (w) => { w.vu.label = v; }); }} /></label>
+      {:else}
+        <label>配色
+          <select value={waveCfg(item).scheme}
+                  onchange={(e) => { const v = e.currentTarget.value; editWave(item, (w) => { w.scheme = v; }); }}>
+            {#each SCHEMES_L as [id, label]}<option value={id}>{label}</option>{/each}
+          </select>
+        </label>
+        <label>落ちの粘り <input type="range" min="0" max="0.99" step="0.01" value={waveCfg(item).smooth}
+          oninput={(e) => { const v = +e.currentTarget.value; editWave(item, (w) => { w.smooth = v; }); }} /></label>
+        <label>残像 <input type="range" min="0" max="0.94" step="0.02" value={waveCfg(item).trail}
+          oninput={(e) => { const v = +e.currentTarget.value; editWave(item, (w) => { w.trail = v; }); }} /></label>
+        <label>グロー <input type="range" min="0" max="34" step="2" value={waveCfg(item).glow}
+          oninput={(e) => { const v = +e.currentTarget.value; editWave(item, (w) => { w.glow = v; }); }} /></label>
+        <label>帯数 <input type="range" min="8" max="64" step="4" value={waveCfg(item).bands}
+          oninput={(e) => { const v = +e.currentTarget.value; editWave(item, (w) => { w.bands = v; }); }} /></label>
+        <label>感度 <input type="range" min="0.4" max="2.2" step="0.05" value={waveCfg(item).gain}
+          oninput={(e) => { const v = +e.currentTarget.value; editWave(item, (w) => { w.gain = v; }); }} /></label>
+        <label>バー間隔 <input type="range" min="0" max="8" step="1" value={waveCfg(item).gap}
+          oninput={(e) => { const v = +e.currentTarget.value; editWave(item, (w) => { w.gap = v; }); }} /></label>
+        <label>ピーク保持線 <input type="checkbox" checked={waveCfg(item).peak}
+          onchange={(e) => { const v = e.currentTarget.checked; editWave(item, (w) => { w.peak = v; }); }} /></label>
+        <label>背景を塗る <input type="checkbox" checked={waveCfg(item).bg}
+          onchange={(e) => { const v = e.currentTarget.checked; editWave(item, (w) => { w.bg = v; }); }} /></label>
+      {/if}
+      <!-- WASAPI の共有モードで出力をそのまま拾っている。Windows 既定なら DAW の
+           排他モードに横取りされて止まるだけだが、「排他モードのアプリを優先する」を
+           切っている環境では逆にこちらが DAW を塞ぐので、手で止められるようにする。 -->
+      <label class="vu-audio">音声取り込みを止める
+        <input type="checkbox" checked={audio.paused}
+               onchange={(e) => { void audio.setPaused(e.currentTarget.checked); }} />
+      </label>
+      <div class="vu-status">
+        {#if audio.paused}
+          停止中（DAW を使うときはこのまま）
+        {:else if audio.status.error}
+          <span class="err">⚠ {audio.status.error}</span>
+        {:else if audio.status.running}
+          ● {audio.status.device} / {audio.status.rate} Hz / {audio.status.channels} ch
+        {:else}
+          待機中…
+        {/if}
+      </div>
     {:else}
       <label class="sensor-search">🔍 <input type="text" placeholder="センサー検索" bind:value={sensorQuery} /></label>
       <label>センサー
@@ -270,4 +366,6 @@
   .row button { flex: 1; padding: 4px; background: #2a2a2a; color: #ddd; border: 1px solid #3a3a3a; cursor: pointer; }
   .row button.on { background: #00d2c4; color: #042; border-color: #00d2c4; }
   .del { margin-top: 4px; padding: 4px; background: #5a2222; color: #fdd; border: 1px solid #7a3333; cursor: pointer; }
+  .vu-status { font-size: 11px; color: #8aa; padding: 2px 0 6px; line-height: 1.5; }
+  .vu-status .err { color: #ff8a8a; }
 </style>
