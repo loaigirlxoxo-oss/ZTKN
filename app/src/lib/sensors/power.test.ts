@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { totalPowerIds, gpuPowerIsEstimated, GPU_POWER_ESTIMATED } from "./match";
+import { totalPowerIds, gpuPowerIsEstimated, GPU_POWER_ESTIMATED, systemPowerId, SYSTEM_POWER_ESTIMATED } from "./match";
 import type { LiveSensor } from "./live.svelte";
 
 const s = (hw: string, name: string, type = "Power"): LiveSensor =>
@@ -24,5 +24,15 @@ describe("totalPowerIds", () => {
   it("GPUの電力がどちらも無ければCPUだけ", () => {
     expect(totalPowerIds([CPU])).toEqual([CPU.id]);
     expect(gpuPowerIsEstimated([CPU])).toBe(false);
+  });
+});
+
+describe("systemPowerId", () => {
+  it("サイドカーが PC 全体の推定を出していればその ID", () => {
+    const sys = s("PC", SYSTEM_POWER_ESTIMATED);
+    expect(systemPowerId([CPU, NV_EST, sys])).toBe(sys.id);
+  });
+  it("出していなければ undefined（CPU+GPU の合算に戻る）", () => {
+    expect(systemPowerId([CPU, NV_EST])).toBeUndefined();
   });
 });

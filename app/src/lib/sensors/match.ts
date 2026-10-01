@@ -50,3 +50,9 @@ export function totalPowerIds(list: LiveSensor[]): string[] {
 export function gpuPowerIsEstimated(list: LiveSensor[]): boolean {
   return gpuPower(list)?.name === GPU_POWER_ESTIMATED;
 }
+
+// サイドカーが出す PC 全体（コンセント側）の推定電力。pc-profile.json の部品構成から足している。
+export const SYSTEM_POWER_ESTIMATED = "System Power (Estimated)";
+export function systemPowerId(list: LiveSensor[]): string | undefined {
+  return pickLhm(list, SYSTEM_POWER_ESTIMATED, "Power", "PC")?.id;
+}
