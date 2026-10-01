@@ -6,7 +6,7 @@
   import { DESIGN_LABELS, SCHEME_LABELS, type WaveDesign, type Scheme } from "$lib/render/visualizers";
   import { audio } from "$lib/sensors/audio.svelte";
   import { sensors, type LiveSensor } from "$lib/sensors/live.svelte";
-  import { pickLhm } from "$lib/sensors/match";
+  import { totalPowerIds } from "$lib/sensors/match";
   import { formatForUnit } from "$lib/render/format";
   import { getImage, loadImage } from "$lib/render/images";
   import { fontStore, ensureFonts } from "$lib/fonts/installed.svelte";
@@ -62,12 +62,6 @@
 
   // 合算センサー「Total Power（CPU+GPU）」を表す特別な選択肢の値。実センサーIDと衝突しない。
   const SUM_POWER = "__sum_power__";
-  // CPU電力＋GPU電力のセンサーIDを解決（テンプレ neon.ts と同じ基準）。
-  function totalPowerIds(): string[] {
-    const cpu = pickLhm(sensors.list, "CPU Package", "Power");
-    const gpu = pickLhm(sensors.list, "GPU Package", "Power", "NVIDIA") ?? pickLhm(sensors.list, "GPU Package", "Power");
-    return [cpu?.id, gpu?.id].filter(Boolean) as string[];
-  }
   // ピッカーの選択値：合算中は SUM_POWER、それ以外は sensorSrc。
   const sensorSelectValue = $derived(item?.sensorSum?.length ? SUM_POWER : (item?.sensorSrc ?? ""));
 
@@ -76,7 +70,7 @@
     if (!item) return;
     const v = (e.currentTarget as HTMLSelectElement).value;
     if (v === SUM_POWER) {
-      item.sensorSum = totalPowerIds();
+      item.sensorSum = totalPowerIds(sensors.list);
       item.sensorSrc = undefined;
       if (item.kind === "SensorText") item.format = formatForUnit("W");
     } else {

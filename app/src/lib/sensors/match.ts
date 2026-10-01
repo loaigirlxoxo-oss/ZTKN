@@ -29,3 +29,24 @@ export function pickSensor(list: LiveSensor[], type: string, nameIncludes: strin
   }
   return type ? pool[0] : undefined; // 種別指定なしはキーワード一致のみ
 }
+
+// サイドカーが、電力を返さない NVIDIA GPU に付ける推定値のセンサー名（GpuPowerEstimator.cs と一致させる）。
+export const GPU_POWER_ESTIMATED = "GPU Power (Estimated)";
+
+// 総電力（CPU+GPU）に使う GPU の電力。本物を優先し、ドライバが電力を返さない機種では推定値を使う。
+function gpuPower(list: LiveSensor[]): LiveSensor | undefined {
+  return pickLhm(list, "GPU Package", "Power", "NVIDIA")
+    ?? pickLhm(list, "GPU Package", "Power")
+    ?? pickLhm(list, GPU_POWER_ESTIMATED, "Power");
+}
+
+// 総電力（CPU+GPU）として足すセンサーID。プロパティの「★ Total Power」とテンプレートで共用する。
+export function totalPowerIds(list: LiveSensor[]): string[] {
+  const cpu = pickLhm(list, "CPU Package", "Power");
+  return [cpu?.id, gpuPower(list)?.id].filter(Boolean) as string[];
+}
+
+// 総電力の GPU 分が推定値かどうか。表示に「推定」と添えるために使う。
+export function gpuPowerIsEstimated(list: LiveSensor[]): boolean {
+  return gpuPower(list)?.name === GPU_POWER_ESTIMATED;
+}

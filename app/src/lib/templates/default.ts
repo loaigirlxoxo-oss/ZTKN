@@ -1,9 +1,9 @@
 import { createPanel, createItem, type Panel, type PanelItem } from "$lib/model/panel";
 import { sensors } from "$lib/sensors/live.svelte";
-import { pickLhm, pickNetwork } from "$lib/sensors/match";
+import { pickLhm, pickNetwork, totalPowerIds, gpuPowerIsEstimated } from "$lib/sensors/match";
 
 // 標準テンプレ「Default」。CPU/GPU(丸ゲージ+中心%、温度・メモリ横バー)、ネットワーク線グラフ、
-// Claude/Codex の使用量(5h/7d 横バー)＋5hリセットのカウントダウンを1画面に整列して並べる。
+// 総消費電力(CPU+GPU合算。GPUが電力を返さない機種は推定値)、Claude/Codex の使用量(5h/7d 横バー)＋5hリセットのカウントダウンを1画面に整列して並べる。
 // ハードは実機(LHM)から解決、使用量は固定ID(usageイベント)を直接参照。
 export function buildDefaultTemplate(): Panel {
   const panel = createPanel(1920, 520);
@@ -16,6 +16,7 @@ export function buildDefaultTemplate(): Panel {
   const COOL: [string, string] = ["#00d2c4", "#3aa0ff"];
   const TEMP: [string, string] = ["#36d399", "#ff3b6b"];
   const MEM: [string, string] = ["#b07cff", "#ff3484"];
+  const PWR: [string, string] = ["#ffd23f", "#ff8a3b"]; // 電力（dense と同じ）
   const CLAUDE: [string, string] = ["#d97757", "#ffb14e"]; // Claudeオレンジ
   const CODEX: [string, string] = ["#10a37f", "#3ad2a0"];  // OpenAIグリーン
   const WARMC = "#ffb14e", COOLC = "#00d2c4", INK = "#eee8d6";
@@ -87,10 +88,26 @@ export function buildDefaultTemplate(): Panel {
 
   label("NETWORK  ↓ / ↑", 600, 24, 17, COOLC, 720, "left");
   const graph = createItem("GraphLine", { x: 600, y: 50 });
-  graph.rect.w = 720; graph.rect.h = 238; graph.unit = "Kbps"; graph.autoUnit = true; graph.valueScale = 8; // KB/s→Kbps
+  graph.rect.w = 720; graph.rect.h = 172; // 下に総電力を置くため、左右の温度行の手前(222)で止める graph.unit = "Kbps"; graph.autoUnit = true; graph.valueScale = 8; // KB/s→Kbps
   graph.graphStyle = "dual-basic"; graph.style.color = COOL[0]; graph.color2 = "#ff3484";
   graph.sensorSrc = netDown; graph.sensorSrc2 = netUp; graph.bgOpacity = 0.25;
   add(graph);
+
+  // 総電力（CPU+GPU）。CPUとGPUの合算なので両者のあいだ＝中央列に置く。
+  // 左右の2段（温度 y=236 / RAM・VRAM y=268）と高さをそろえ、上段に大きな数値、下段に全幅のバー。
+  const powerIds = totalPowerIds(sensors.list); // プロパティの「★ Total Power」と同じ解決
+  // GPU が電力を返さない機種では推定値を足している。実測と取り違えないよう明記する。
+  const powerTitle = gpuPowerIsEstimated(sensors.list) ? "総消費電力  CPU + GPU（GPUは推定）" : "総消費電力  CPU + GPU";
+  label(powerTitle, 600, 239, 14, PWR[0], 400, "left");
+  const pv = createItem("SensorText", { x: 1120, y: 228 });
+  pv.sensorSum = powerIds; pv.format = "%d W"; pv.style.fontSize = 26; pv.style.color = INK; pv.style.align = "right";
+  pv.rect.w = 200; pv.rect.h = 32;
+  add(pv);
+  const pb = createItem("BarH", { x: 600, y: 268 });
+  pb.rect.w = 720; pb.rect.h = 20; pb.sensorSum = powerIds; pb.range = [0, 650]; // CPU 250W + GPU 400W（dense の上限）
+  pb.style.color = PWR[0]; pb.useGradient = true; pb.gradColor = PWR[1];
+  pb.bgColor = "#161616"; pb.bgOpacity = 1; pb.frameColor = "#2a2a2a"; pb.frameOpacity = 1;
+  add(pb);
 
   // 仕切り
   const div = createItem("Line", { x: 60, y: 302 });
