@@ -24,13 +24,25 @@ var computer = new Computer
 };
 computer.Open();
 var visitor = new UpdateVisitor();
+// NVML は先頭の NVIDIA GPU しか見ないので、NVIDIA が1枚のときだけ推定を使う。
+var gpuEstimator = computer.Hardware.Count(h => h.HardwareType == HardwareType.GpuNvidia) == 1
+    ? GpuPowerEstimator.TryCreate() : null;
 
 while (true)
 {
     computer.Accept(visitor);
     var sensors = new List<SensorDto>();
     var used = new HashSet<string>();
-    foreach (var hw in computer.Hardware) CollectLhm(hw, sensors, used);
+    foreach (var hw in computer.Hardware)
+    {
+        CollectLhm(hw, sensors, used);
+        if (gpuEstimator != null && hw.HardwareType == HardwareType.GpuNvidia && !HasPower(hw)
+            && gpuEstimator.Estimate(hw) is float est)
+        {
+            string id = $"{hw.Name}|{GpuPowerEstimator.SensorName}|Power";
+            if (used.Add(id)) sensors.Add(new SensorDto(id, GpuPowerEstimator.SensorName, hw.Name, "Power", est, "W"));
+        }
+    }
     stdout.WriteLine(JsonSerializer.Serialize(new Payload("LHM", sensors)));
     stdout.Flush();
     Thread.Sleep(intervalMs);
@@ -53,6 +65,10 @@ static void CollectLhm(IHardware hw, List<SensorDto> outList, HashSet<string> us
     }
     foreach (var sub in hw.SubHardware) CollectLhm(sub, outList, usedIds);
 }
+
+// ドライバが電力を返す GPU では推定を出さない（本物の値と二重になる）。
+static bool HasPower(IHardware hw) =>
+    hw.Sensors.Any(s => s.SensorType == SensorType.Power && s.Value is float v && float.IsFinite(v));
 
 static string UnitForLhm(SensorType t) => t switch
 {
