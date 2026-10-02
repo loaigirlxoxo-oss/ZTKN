@@ -179,18 +179,36 @@ const plain = (c: DrawCtx): void => {
   c.g.shadowBlur = 0;
 };
 
+// グラデーションを使い回す。毎フレーム作ると Blink 側に溜まり、ページのメモリが増え続けた
+// （棒グラフは 1 フレームに帯の数だけ作り、毎秒 2,500 個超。約 7 時間で OOM で落ちた。
+//  使い回すと 6 分間で増加 0 を実測）。キーが変わる（配色・大きさ・量子化した値）ときだけ作る。
+// 部品の作業領域(st)に置くので、大きさや意匠が変わると一緒に捨てられる。上限を超えたら作り直す。
+function memoGrad(d: WaveState, key: string, make: () => CanvasGradient): CanvasGradient {
+  const m = (d.st.grads ??= new Map<string, CanvasGradient>()) as Map<string, CanvasGradient>;
+  let gr = m.get(key);
+  if (!gr) {
+    if (m.size >= 128) m.clear();
+    gr = make();
+    m.set(key, gr);
+  }
+  return gr;
+}
+
 // ---- 棒 ----------------------------------------------------------------
 function barsSolid(c: DrawCtx): void {
   fade(c);
   const { g, w, h, s, d, n } = c;
   const base = h - 3, span = h - 9, slot = w / n, bw = Math.max(1, slot - s.gap);
+  // 高さ全体に1本だけ作り、全部の棒で使い回す。棒の上端の色は tone(v) で従来どおり。
+  const gr = memoGrad(d, `bar|${s.scheme}|${h}`, () => {
+    const lg = g.createLinearGradient(0, base, 0, base - span);
+    for (let k = 0; k <= 8; k++) lg.addColorStop(k / 8, rgb(c.tone(k / 8), 0.95 + 0.05 * (k / 8)));
+    return lg;
+  });
   for (let i = 0; i < n; i++) {
     const v = d.cur[i], col = c.tone(v);
     const x = i * slot + (slot - bw) / 2, bh = Math.max(1, v * span);
     lit(c, col);
-    const gr = g.createLinearGradient(0, base, 0, base - bh);
-    gr.addColorStop(0, rgb(c.tone(Math.max(0, v - 0.45)), 0.95));
-    gr.addColorStop(1, rgb(col, 1));
     g.fillStyle = gr;
     g.fillRect(x, base - bh, bw, bh);
     if (s.peak && d.pk[i] > 0.02) {
@@ -278,12 +296,16 @@ function ringBars(c: DrawCtx): void {
   const { g, w, h, s, d, n } = c;
   const cx = w / 2, cy = h / 2;
   const rIn = Math.min(w, h) * 0.2, rMax = Math.min(w, h) * 0.46 - rIn;
-  const coreR = rIn * (0.52 + d.bass * 0.42);
-  lit(c, c.tone(Math.min(1, d.bass * 1.6)));
-  const rg = g.createRadialGradient(cx, cy, 0, cx, cy, coreR);
-  rg.addColorStop(0, rgb(c.tone(Math.min(1, 0.3 + d.bass)), 0.85));
-  rg.addColorStop(1, rgb(c.tone(0.1), 0));
-  g.fillStyle = rg;
+  // 低音の強さで大きさと色が変わる。32 段階に丸めて段階ごとに使い回す（見た目は変わらない）。
+  const qb = Math.round(Math.min(1, d.bass) * 32) / 32;
+  const coreR = rIn * (0.52 + qb * 0.42);
+  lit(c, c.tone(Math.min(1, qb * 1.6)));
+  g.fillStyle = memoGrad(d, `core|${s.scheme}|${w}x${h}|${qb}`, () => {
+    const rg = g.createRadialGradient(cx, cy, 0, cx, cy, coreR);
+    rg.addColorStop(0, rgb(c.tone(Math.min(1, 0.3 + qb)), 0.85));
+    rg.addColorStop(1, rgb(c.tone(0.1), 0));
+    return rg;
+  });
   g.beginPath(); g.arc(cx, cy, coreR, 0, Math.PI * 2); g.fill();
   plain(c);
   const step = (Math.PI * 2) / n, bw = Math.max(1.5, rIn * step - s.gap * 0.5);
@@ -330,7 +352,7 @@ function polar(c: DrawCtx): void {
 
 function blob(c: DrawCtx): void {
   fade(c);
-  const { g, w, h, d, n } = c;
+  const { g, w, h, s, d, n } = c;
   const cx = w / 2, cy = h / 2;
   const rIn = Math.min(w, h) * 0.17, rMax = Math.min(w, h) * 0.45 - rIn;
   const col = c.tone(Math.min(1, d.bass * 1.3 + 0.25));
@@ -342,10 +364,15 @@ function blob(c: DrawCtx): void {
     i ? g.lineTo(x, y) : g.moveTo(x, y);
   }
   g.closePath();
-  const rg = g.createRadialGradient(cx, cy, rIn * 0.3, cx, cy, rIn + rMax);
-  rg.addColorStop(0, rgb(c.tone(0.85), 0.5));
-  rg.addColorStop(1, rgb(col, 0.1));
-  g.fillStyle = rg; g.fill();
+  // 外側の色が低音で変わる。32 段階に丸めて使い回す。
+  const qb = Math.round(Math.min(1, d.bass * 1.3 + 0.25) * 32) / 32;
+  g.fillStyle = memoGrad(d, `blob|${s.scheme}|${w}x${h}|${qb}`, () => {
+    const rg = g.createRadialGradient(cx, cy, rIn * 0.3, cx, cy, rIn + rMax);
+    rg.addColorStop(0, rgb(c.tone(0.85), 0.5));
+    rg.addColorStop(1, rgb(c.tone(qb), 0.1));
+    return rg;
+  });
+  g.fill();
   g.strokeStyle = rgb(col, 1); g.lineWidth = 1.8; g.lineJoin = "round"; g.stroke();
   plain(c);
 }

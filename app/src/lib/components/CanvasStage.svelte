@@ -790,7 +790,17 @@
       window.addEventListener("resize", onResize);
       detachResize = () => window.removeEventListener("resize", onResize);
     }
-    return () => { detachWinUp?.(); detachResize?.(); gifAnim?.stop(); };
+    return () => {
+      detachWinUp?.(); detachResize?.(); gifAnim?.stop();
+      // 編集画面と表示専用画面を切り替えるたびにこのコンポーネントは作り直される。
+      // ここで片づけないと、外れたステージが Konva.stages に残り、音声ビジュアライザの
+      // アニメーションはページから外れたキャンバスに毎秒60回描き続け、音声の取り込みも止まらない。
+      vuAnim?.stop(); vuAnim = undefined;
+      for (const r of vuRt.values()) r.release();
+      for (const r of waveRt.values()) r.release();
+      vuRt.clear(); waveRt.clear();
+      stage?.destroy(); stage = undefined; // Konva.stages から外し、キャンバスを手放す
+    };
   });
 
   // 構造変更（追加/削除/リサイズ/プロパティ）だけで作り直す。

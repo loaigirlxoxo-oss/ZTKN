@@ -270,35 +270,53 @@ export function buildGrime(v: VuVariant, glass: HTMLImageElement): HTMLCanvasEle
   return c;
 }
 
+// グラデーションを使い回す。毎フレーム作ると Blink 側に溜まり、ページのメモリが増え続けた
+// （visualizers.ts の memoGrad と同じ理由）。座標は素材の座標系の定数なので、
+// キーは素材・種類・強さだけでよい。スライダーで強さを変えるたびに増えるので上限を設ける。
+const gradCache = new Map<string, CanvasGradient>();
+function memoGrad(key: string, make: () => CanvasGradient): CanvasGradient {
+  let gr = gradCache.get(key);
+  if (!gr) {
+    if (gradCache.size >= 64) gradCache.clear();
+    gr = make();
+    gradCache.set(key, gr);
+  }
+  return gr;
+}
+
 /** 枠が文字板に落とす影。光源は左上なので上と左が濃い。 */
 function drawShadow(g: Ctx, v: VuVariant, al: number): void {
   const w = v.window;
   const L = w.left, T = w.top, Rr = L + w.width, B = T + w.height;
   const d1 = Math.round(w.height * 0.105), d2 = Math.round(w.height * 0.052);
-  const band = (bx: number, by: number, bw: number, bh: number,
+  const band = (side: string, bx: number, by: number, bw: number, bh: number,
                 x0: number, y0: number, x1: number, y1: number, a: number) => {
     if (bw <= 0 || bh <= 0) return;
-    const lg = g.createLinearGradient(x0, y0, x1, y1);
-    lg.addColorStop(0, `rgba(10,7,4,${a})`);
-    lg.addColorStop(0.3, `rgba(10,7,4,${a * 0.42})`);
-    lg.addColorStop(0.64, `rgba(10,7,4,${a * 0.13})`);
-    lg.addColorStop(1, "rgba(10,7,4,0)");
-    g.fillStyle = lg;
+    g.fillStyle = memoGrad(`${v.id}|shadow|${side}|${a}`, () => {
+      const lg = g.createLinearGradient(x0, y0, x1, y1);
+      lg.addColorStop(0, `rgba(10,7,4,${a})`);
+      lg.addColorStop(0.3, `rgba(10,7,4,${a * 0.42})`);
+      lg.addColorStop(0.64, `rgba(10,7,4,${a * 0.13})`);
+      lg.addColorStop(1, "rgba(10,7,4,0)");
+      return lg;
+    });
     g.fillRect(bx, by, bw, bh);
   };
-  band(L, T, w.width, d1, L, T, L, T + d1, 0.5 * al);
-  band(L, T, d1, w.height, L, T, L + d1, T, 0.42 * al);
-  band(L, B - d2, w.width, d2, L, B, L, B - d2, 0.24 * al);
-  band(Rr - d2, T, d2, w.height, Rr, T, Rr - d2, T, 0.2 * al);
+  band("top", L, T, w.width, d1, L, T, L, T + d1, 0.5 * al);
+  band("left", L, T, d1, w.height, L, T, L + d1, T, 0.42 * al);
+  band("bottom", L, B - d2, w.width, d2, L, B, L, B - d2, 0.24 * al);
+  band("right", Rr - d2, T, d2, w.height, Rr, T, Rr - d2, T, 0.2 * al);
   // 開口のすぐ内側の濃い線。これが無いと影が段差に見えない。
   g.strokeStyle = `rgba(8,5,3,${0.38 * al})`;
   g.lineWidth = 3;
   g.strokeRect(L + 1.5, T + 1.5, w.width - 3, w.height - 3);
   const bh2 = Math.round(d2 * 0.6);
-  const bl = g.createLinearGradient(L, B, L, B - bh2);
-  bl.addColorStop(0, `rgba(255,228,186,${0.055 * al})`);
-  bl.addColorStop(1, "rgba(255,228,186,0)");
-  g.fillStyle = bl;
+  g.fillStyle = memoGrad(`${v.id}|bounce|${al}`, () => {
+    const bl = g.createLinearGradient(L, B, L, B - bh2);
+    bl.addColorStop(0, `rgba(255,228,186,${0.055 * al})`);
+    bl.addColorStop(1, "rgba(255,228,186,0)");
+    return bl;
+  });
   g.fillRect(L, B - bh2, w.width, bh2);
 }
 
@@ -353,14 +371,16 @@ export function drawVu(g: Ctx, v: VuVariant, L: VuLayers, s: VuSettings, pos: [n
   if (s.lamp > 0) {                                          // 4. バックライト
     g.save();
     g.globalCompositeOperation = "lighter";
-    for (const pv of pivots(v)) {
+    pivots(v).forEach((pv, i) => {
       const cy = pv.y - v.radius * 0.45;
-      const lg = g.createRadialGradient(pv.x, cy, 4, pv.x, cy, v.radius * 0.95);
-      lg.addColorStop(0, `rgba(${v.lamp},${0.3 * s.lamp})`);
-      lg.addColorStop(1, `rgba(${v.lamp},0)`);
-      g.fillStyle = lg;
+      g.fillStyle = memoGrad(`${v.id}|lamp|${i}|${s.lamp}`, () => {
+        const lg = g.createRadialGradient(pv.x, cy, 4, pv.x, cy, v.radius * 0.95);
+        lg.addColorStop(0, `rgba(${v.lamp},${0.3 * s.lamp})`);
+        lg.addColorStop(1, `rgba(${v.lamp},0)`);
+        return lg;
+      });
       g.fillRect(w.left, w.top, w.width, w.height);
-    }
+    });
     g.restore();
   }
 
