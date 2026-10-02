@@ -38,3 +38,5 @@ app/image/
 
 # PC固有の部品構成（電力推定用）。機種ごとに違うので配布物には含めない
 app/pc-profile.json
+# アプリの設定（PCごと）。配布物には含めない
+app/ztkn-settings.json

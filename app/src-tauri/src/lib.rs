@@ -5,6 +5,7 @@ use tauri::{AppHandle, Emitter, Manager};
 
 mod aihooks; // Claude/Codex のフック設定の導入・削除
 mod audio; // 出力音声のループバック取り込み(VUメーター用)
+mod live; // 画面が取りに来る最新値（センサー・AI使用量・承認待ち）
 mod codexapp; // Codex アプリ(フック非対応)の実行中をセッション記録から検出
 mod usage; // AI使用量(プラン残量%・5h/7d枠)の取得
 
@@ -29,6 +30,11 @@ fn sidecar_path(app: &AppHandle) -> PathBuf {
 // 値が 0 のまま返り続ける。復旧手段はプロセスの起動し直しだけなので、手動で行えるようにする。
 static SIDECAR_PID: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
 
+// サイドカーが固まったと判断するまでの時間。送出間隔は 0.5 秒なので、15 秒黙っていれば異常。
+const SIDECAR_STALL_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
+// 最初の1行まで。LHM の Open は機種によって数秒〜十数秒かかる。
+const SIDECAR_FIRST_LINE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
+
 // サイドカーを子プロセスとして起動し、stdout の JSON 行を "sensors" イベントで
 // フロントへ転送する。プロセスが落ちたら指数バックオフで再起動する（握りつぶさず通知）。
 fn start_sensor_sidecar(app: AppHandle) {
@@ -39,6 +45,12 @@ fn start_sensor_sidecar(app: AppHandle) {
             let mut cmd = Command::new(&path);
             // 第2引数は PC 全体の電力推定に使う部品構成（無ければサイドカーが既定値を使う）。
             cmd.arg("500").arg(pc_profile_path());
+            // 親（このアプリ）の PID。アプリが落ちてもサイドカーが取り残されないよう、消えたら自分で終わる。
+            cmd.arg("--parent").arg(std::process::id().to_string());
+            // メモリ温度は SMBus を使う。他のソフトと取り合うと詰まることがあるので、選んだときだけ。
+            if load_sensor_options().memory_temperature {
+                cmd.arg("--memory-temps");
+            }
             cmd.stdout(Stdio::piped()).stderr(Stdio::null());
             #[cfg(windows)]
             {
@@ -51,17 +63,24 @@ fn start_sensor_sidecar(app: AppHandle) {
                     SIDECAR_PID.store(child.id(), std::sync::atomic::Ordering::Relaxed);
                     let _ = app.emit("sensor-status", "connected");
                     if let Some(out) = child.stdout.take() {
-                        for line in BufReader::new(out).lines() {
-                            match line {
-                                Ok(l) if !l.is_empty() => {
-                                    let _ = app.emit("sensors", l);
-                                }
-                                Ok(_) => {}
-                                Err(_) => break,
-                            }
+                        // イベントで送らず最新値として置く。画面が取りに来る（live.rs の説明）。
+                        let end = pump_lines(out, SIDECAR_FIRST_LINE_TIMEOUT, SIDECAR_STALL_TIMEOUT, |l| {
+                            live::publish("sensors", l);
+                        });
+                        if let PumpEnd::Stalled(secs) = end {
+                            eprintln!("[sidecar] {secs}秒出力が無いので起動し直す");
+                            let _ = app.emit("sensor-status", "stalled");
+                            let _ = child.kill(); // 自分が起動した子プロセスだけ
                         }
                     }
-                    let _ = child.wait();
+                    // ドライバ（PawnIO）の中で止まったプロセスは、強制終了しても消えない。
+                    // そこで新しく起動すると、同じところで止まったプロセスが増えていくだけ
+                    // （別PCで PawnIO ごと固まった）。消えるまでは次を起動せず、理由を出して待つ。
+                    if !wait_exit(&mut child, std::time::Duration::from_secs(10)) {
+                        eprintln!("[sidecar] 終了しない。ドライバが応答していない");
+                        let _ = app.emit("sensor-status", "driver-hung");
+                        while !wait_exit(&mut child, std::time::Duration::from_secs(30)) {}
+                    }
                     SIDECAR_PID.store(0, std::sync::atomic::Ordering::Relaxed);
                     let _ = app.emit("sensor-status", "disconnected");
                 }
@@ -73,6 +92,66 @@ fn start_sensor_sidecar(app: AppHandle) {
             backoff = (backoff * 2).min(30);
         }
     });
+}
+
+// 子プロセスの終了を最大 timeout だけ待つ。終了していれば true。
+fn wait_exit(child: &mut std::process::Child, timeout: std::time::Duration) -> bool {
+    let start = std::time::Instant::now();
+    loop {
+        match child.try_wait() {
+            Ok(Some(_)) => return true,
+            Ok(None) if start.elapsed() < timeout => std::thread::sleep(std::time::Duration::from_millis(200)),
+            Ok(None) => return false,
+            Err(_) => return true, // 状態が取れないものは待ち続けない
+        }
+    }
+}
+
+#[derive(Debug, PartialEq)]
+enum PumpEnd {
+    /// 相手が出力を閉じた（終了した）。
+    Closed,
+    /// 指定秒数のあいだ1行も来なかった。
+    Stalled(u64),
+}
+
+// サイドカーの出力を1行ずつ渡す。読み取りは別スレッドに任せ、ここでは時間切れ付きで待つ。
+// サイドカーが終了せずに固まる（ドライバ呼び出しから戻らない等）と、直接 lines() を回すと
+// 永遠に待ち続け、再起動もされない。別PCで数日後にセンサーだけ止まったのはこの経路と見ている。
+// Stalled が返ったら、呼び出し側が子プロセスを止める（止めると読み取りスレッドも抜ける）。
+fn pump_lines<R: std::io::Read + Send + 'static>(
+    out: R,
+    first_timeout: std::time::Duration,
+    stall_timeout: std::time::Duration,
+    mut on_line: impl FnMut(String),
+) -> PumpEnd {
+    let (tx, rx) = std::sync::mpsc::channel::<String>();
+    std::thread::spawn(move || {
+        for line in BufReader::new(out).lines() {
+            match line {
+                Ok(l) => {
+                    if tx.send(l).is_err() {
+                        break;
+                    }
+                }
+                Err(_) => break,
+            }
+        }
+    });
+    let mut first = true;
+    loop {
+        let limit = if first { first_timeout } else { stall_timeout };
+        match rx.recv_timeout(limit) {
+            Ok(l) => {
+                first = false;
+                if !l.is_empty() {
+                    on_line(l);
+                }
+            }
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => return PumpEnd::Stalled(limit.as_secs()),
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => return PumpEnd::Closed,
+        }
+    }
 }
 
 // センサーを読み直す。サイドカーを終了させるだけで、上のループが自動で起動し直す。
@@ -96,6 +175,45 @@ fn restart_sensor_sidecar() -> Result<(), String> {
     } else {
         Err(String::from_utf8_lossy(&out.stderr).trim().to_string())
     }
+}
+
+// センサーの読み方の設定。アプリ基準の ztkn-settings.json に置く（Panels と同じ場所）。
+#[derive(serde::Serialize, serde::Deserialize, Default, Clone)]
+#[serde(rename_all = "camelCase", default)]
+struct SensorOptions {
+    /// メモリモジュールの温度を読む。SMBus を PawnIO 経由で使うので、RGB 制御ソフトなどと
+    /// 取り合うとドライバごと詰まることがある。既定はオフ。
+    memory_temperature: bool,
+}
+
+fn settings_path() -> PathBuf {
+    let mut d = assets_dir();
+    d.pop();
+    d.push("ztkn-settings.json");
+    d
+}
+
+fn load_sensor_options() -> SensorOptions {
+    std::fs::read_to_string(settings_path())
+        .ok()
+        .and_then(|t| serde_json::from_str(&t).ok())
+        .unwrap_or_default()
+}
+
+#[tauri::command]
+fn get_sensor_options() -> SensorOptions {
+    load_sensor_options()
+}
+
+// 保存してサイドカーを起動し直す（起動時の引数で反映されるため）。
+#[tauri::command]
+fn set_sensor_options(memory_temperature: bool) -> Result<SensorOptions, String> {
+    let opts = SensorOptions { memory_temperature };
+    let json = serde_json::to_string_pretty(&opts).map_err(|e| e.to_string())?;
+    std::fs::write(settings_path(), json).map_err(|e| format!("設定を保存できない: {e}"))?;
+    // 起動していなければ、次の自動起動で新しい設定が使われる
+    let _ = restart_sensor_sidecar();
+    Ok(opts)
 }
 
 // PC 固有の部品構成（電力推定用）。Panels と同じくアプリ基準に置く（debug=app/, 製品=exe と同じ場所）。
@@ -329,7 +447,7 @@ const USAGE_TICK_SECS: u64 = 60;
 const USAGE_INTERVAL_TICKS: u64 = 5; // 5分
 const BACKOFF_MAX_TICKS: u64 = 60; // 上限1時間
 
-fn start_usage_poller(app: AppHandle) {
+fn start_usage_poller() {
     std::thread::spawn(move || {
         // 直近値をキャッシュ＝一時的な取得失敗でも前回値を出し続ける（表示が消えない）。
         let mut claude_cache: Option<usage::ClaudeUsage> = None;
@@ -364,7 +482,7 @@ fn start_usage_poller(app: AppHandle) {
                     Err(e) => eprintln!("[usage] antigravity: {e}"),
                 }
             }
-            let _ = app.emit(
+            live::publish(
                 "usage",
                 usage::usage_event_json(claude_cache.as_ref(), codex_cache.as_ref(), ag_cache.as_ref()),
             );
@@ -542,11 +660,11 @@ fn get_agent_alerts() -> String {
 }
 
 // 承認待ちを定期配信するポーラー（1秒）。件数(usageセンサー) と 待ちフォルダ一覧 の両方を流す。
-fn start_agent_alert_poller(app: AppHandle) {
+fn start_agent_alert_poller() {
     std::thread::spawn(move || loop {
         let list = read_agent_alerts_list();
-        let _ = app.emit("usage", agent_count_usage_json(&list)); // A: 件数センサー（Claude/Codex別）
-        let _ = app.emit(
+        live::publish("agent-usage", agent_count_usage_json(&list)); // A: 件数センサー（Claude/Codex別）
+        live::publish(
             "agent-alerts",
             serde_json::to_string(&list).unwrap_or_else(|_| "[]".into()),
         ); // B: フォルダ一覧（AlertList部品用）
@@ -605,8 +723,8 @@ pub fn run() {
             let _ = std::fs::create_dir_all(assets_dir()); // 起動時にAssetsを必ず用意
             let _ = std::fs::create_dir_all(images_dir()); // 1枚絵置き場 image/ も用意
             start_sensor_sidecar(app.handle().clone());
-            start_usage_poller(app.handle().clone()); // AI使用量を定期取得して "usage" で配信
-            start_agent_alert_poller(app.handle().clone()); // 承認待ちを "agent-alerts" で配信
+            start_usage_poller(); // AI使用量を定期取得して "usage" で配信
+            start_agent_alert_poller(); // 承認待ちを live の "agent-alerts" に置く
             setup_tray(app.handle())?; // タスクトレイ常駐
             // 自動起動(--minimized)時はウィンドウを出さずトレイ常駐で開始
             if std::env::args().any(|a| a == "--minimized") {
@@ -629,7 +747,8 @@ pub fn run() {
             assets_root, open_assets_dir, list_asset_sets, list_fonts, list_images, open_images_dir,
             get_claude_usage_event, get_agent_alerts, ai_hooks_status, set_ai_hooks,
             restart_sensor_sidecar,
-            audio::audio_start, audio::audio_stop, audio::audio_status
+            audio::audio_start, audio::audio_stop, audio::audio_status, audio::audio_frame,
+            live::get_live, get_sensor_options, set_sensor_options
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -638,6 +757,45 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// 1行出したあと固まる相手。固まっている間 read から戻らない。
+    struct StallAfterFirst { sent: bool }
+    impl std::io::Read for StallAfterFirst {
+        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+            if !self.sent {
+                self.sent = true;
+                let b = b"line1
+";
+                buf[..b.len()].copy_from_slice(b);
+                return Ok(b.len());
+            }
+            std::thread::sleep(std::time::Duration::from_secs(2));
+            Ok(0)
+        }
+    }
+
+    // サイドカーが終了せずに黙り込んだら、時間切れで抜けて再起動へ回ること。
+    #[test]
+    fn pump_detects_stalled_sidecar() {
+        let mut got = Vec::new();
+        let ms = std::time::Duration::from_millis;
+        let end = pump_lines(StallAfterFirst { sent: false }, ms(1000), ms(300), |l| got.push(l));
+        assert_eq!(got, vec!["line1".to_string()]);
+        assert!(matches!(end, PumpEnd::Stalled(_)));
+    }
+
+    // 普通に終了したときは Closed で抜け、出た行は全部渡ること。
+    #[test]
+    fn pump_returns_closed_when_sidecar_exits() {
+        let mut got = Vec::new();
+        let ms = std::time::Duration::from_millis;
+        let end = pump_lines(std::io::Cursor::new(b"a
+
+b
+".to_vec()), ms(1000), ms(1000), |l| got.push(l));
+        assert_eq!(got, vec!["a".to_string(), "b".to_string()]);
+        assert_eq!(end, PumpEnd::Closed);
+    }
 
     // 実行中/承認待ちの表示判定。PIDを「死亡＝除外」に使うと実行中が一切出なくなる
     // （フックの祖先PIDは短命プロセスを指すため）ので、その退行を防ぐ。

@@ -33,6 +33,22 @@
 
   // センサーの読み直し。サイドカーを終了させ、アプリ側の監視ループが起動し直す。
   // ドライバのリセットやスリープ復帰でハードウェアが読めなくなると値が0のまま戻らないため。
+  // メモリ温度（SMBus）。他のRGB制御ソフトなどと取り合うとセンサーごと固まることがあるので既定はオフ。
+  let memoryTemps = $state(false);
+  invoke<{ memoryTemperature: boolean }>("get_sensor_options")
+    .then((o) => { memoryTemps = o.memoryTemperature; })
+    .catch(() => { /* 非Tauri実行時は無視 */ });
+  async function toggleMemoryTemps(on: boolean): Promise<void> {
+    msg = on ? "メモリ温度を読みます（センサーを起動し直しています…）" : "メモリ温度を読みません（センサーを起動し直しています…）";
+    try {
+      const o = await invoke<{ memoryTemperature: boolean }>("set_sensor_options", { memoryTemperature: on });
+      memoryTemps = o.memoryTemperature;
+    } catch (e) {
+      msg = `設定を変えられませんでした: ${e}`;
+    }
+    setTimeout(() => { msg = ""; }, 4000);
+  }
+
   async function restartSensors(): Promise<void> {
     msg = "センサーを読み直しています…";
     try {
@@ -211,6 +227,9 @@
     <button class="mini" title="センサーを読み直す（GPU等の値が0のまま戻らない時に使う。ドライバのリセットやスリープ復帰でハードウェアが読めなくなることがある）"
       onclick={restartSensors}>♻</button>
     <button class="mini" title="センサーカタログを掃除（旧センサーを消して作り直す）" onclick={() => sensors.clearCatalog()}>🗑</button>
+    <label class="mini-check" title="メモリモジュールの温度を読む。SMBus を使うので、RGB 制御ソフトなど他のツールとぶつかると、センサーが固まって PC の再起動が必要になることがあります">
+      <input type="checkbox" checked={memoryTemps} onchange={(e) => toggleMemoryTemps(e.currentTarget.checked)} /> メモリ温度
+    </label>
     <span class="msg">{msg}</span>
   </div>
 
@@ -249,6 +268,7 @@
   .sensor-status { color: #8ab; font-size: 12px; margin-left: auto; }
   .mini { padding: 2px 6px; background: #2a2a2a; color: #ddd; border: 1px solid #3a3a3a; cursor: pointer; }
   .msg { color: #00ffcc; font-size: 12px; }
+  .mini-check { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: #aab; cursor: pointer; }
   .editor { display: flex; align-items: stretch; flex: 1 1 auto; min-height: 0; }
   .canvas-wrap { flex: 1; padding: 16px; overflow: auto; height: 100%; }
   .drawer { flex: 0 0 38vh; min-height: 0; }

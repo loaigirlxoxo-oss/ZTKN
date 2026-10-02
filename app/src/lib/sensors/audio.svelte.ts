@@ -1,9 +1,12 @@
-import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 
-// 出力音声のループバック取り込み。Rust 側が ~60Hz で "audio-level" を投げてくる。
-// 値はチャンネルごとの RMS 振幅（0..1）。VU への換算は参照レベルが要るので
-// 部品側（refDb）で行う。
+// 出力音声のループバック取り込み。値はチャンネルごとの RMS 振幅（0..1）と帯域・波形。
+// VU への換算は参照レベルが要るので部品側（refDb）で行う。
+//
+// Rust からイベントで送りつけず、画面の描画1回ごとに最新の1フレームを取りに行く。
+// Tauri のイベントは webview で JavaScript を評価して届けるので、60Hz で送り続けると
+// ページのメモリが増え続け、約7時間で OOM で落ちた（tauri-apps/tauri#12724）。
+// 取りに行く形なら、ページが忙しい・隠れている・落ちているときにデータがたまらない。
 
 // 参照が 0 になってから実際に手放すまでの猶予。構造の作り直しを跨ぐ長さが要る。
 const IDLE_RELEASE_MS = 1500;
@@ -27,20 +30,36 @@ class AudioHub {
   /** DAW が排他モードで開く前に手で止めておくための停止。部品を消さずに device を手放す。 */
   paused = $state(false);
 
-  private listening: Promise<unknown> | null = null;
+  private polling = false;
 
   private async ensure(): Promise<void> {
     if (this.started || this.paused) return;
     this.started = true;
     try {
-      // 購読は一度だけ。停止/再開を繰り返してもリスナーを増やさない。
-      this.listening ??= listen<Level>("audio-level", (e) => { this.level = e.payload; });
-      await this.listening;
       this.status = await invoke<Status>("audio_start");
+      this.poll();
     } catch (e) {
       this.started = false;
       this.status = { ...this.status, running: false, error: String(e) };
     }
+  }
+
+  /**
+   * 描画1回ごとに最新フレームを1つ取る。前の取得が終わるまで次は出さない（重ならない）。
+   * requestAnimationFrame なので、ウィンドウが隠れているときは自然に止まる。
+   */
+  private poll(): void {
+    if (this.polling) return;
+    this.polling = true;
+    const tick = async () => {
+      if (!this.started) { this.polling = false; return; }
+      try {
+        const f = await invoke<Level | null>("audio_frame");
+        if (f) this.level = f;
+      } catch { /* 1回の失敗は次のフレームで取り直す */ }
+      requestAnimationFrame(() => { void tick(); });
+    };
+    void tick();
   }
 
   /**

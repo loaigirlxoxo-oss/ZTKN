@@ -1,5 +1,6 @@
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
+import { onLive } from "./livePoll";
 import { editor } from "$lib/editor/editorState.svelte";
 
 export interface LiveSensor { id: string; name: string; hw: string; type: string; unit: string; }
@@ -77,10 +78,11 @@ class SensorHub {
   async start(): Promise<void> {
     if (this.started) return;
     this.started = true;
-    await listen<string>("sensors", (e) => {
+    // センサー値はイベントでなく Rust の最新値置き場から取りに行く（livePoll.ts の説明）。
+    onLive("sensors", (raw) => {
       let payload: { source: string; sensors: RawSensor[] };
       try {
-        payload = JSON.parse(e.payload);
+        payload = JSON.parse(raw);
       } catch {
         return;
       }
@@ -106,10 +108,16 @@ class SensorHub {
     await listen<string>("sensor-status", (e) => {
       if (e.payload === "connected") this.status = "接続済み";
       else if (e.payload === "disconnected") this.status = "切断（再接続中…）";
+      // サイドカーが固まって出力が止まった。Rust 側が止めて起動し直す。
+      else if (e.payload === "stalled") this.status = "応答なし（再起動中…）";
+      // サイドカーがドライバの中で止まり、強制終了しても消えない。PC の再起動でしか戻らない。
+      else if (e.payload === "driver-hung") this.status = "センサーのドライバが応答しません（PCの再起動が必要です）";
       else this.status = e.payload;
     });
-    // AI使用量(別イベント)。実センサーとは別スロットへ入れ、カタログに載せてピッカーに出す。
-    await listen<string>("usage", (e) => this.ingestUsage(e.payload));
+    // AI使用量。実センサーとは別スロットへ入れ、カタログに載せてピッカーに出す。
+    // "usage" はプラン残量、"agent-usage" は実行中・承認待ちの件数。
+    onLive("usage", (raw) => this.ingestUsage(raw));
+    onLive("agent-usage", (raw) => this.ingestUsage(raw));
     // 起動直後は poller の初回emitを取り逃す可能性があるので、一度だけ即取得して種にする。
     invoke<string>("get_claude_usage_event").then((j) => this.ingestUsage(j)).catch(() => { /* 未ログイン等は無視 */ });
   }

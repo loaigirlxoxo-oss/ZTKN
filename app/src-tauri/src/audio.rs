@@ -6,9 +6,16 @@
 //! The stream itself is `!Send` on Windows, so one dedicated thread owns it and
 //! the rest of the app only sees a stop flag.
 //!
-//! What is emitted is deliberately raw: RMS amplitude, band magnitudes and a
+//! What is published is deliberately raw: RMS amplitude, band magnitudes and a
 //! decimated waveform. Reference level, smoothing, gain and peak hold are
 //! per-part user settings, so they stay in the frontend.
+//!
+//! Delivery is pull, not push. The frontend asks for the latest frame with
+//! `audio_frame` once per display frame. Tauri events are delivered by
+//! evaluating JavaScript in the webview, and at 60 Hz the renderer's memory grew
+//! until it was killed for OOM after about 7 hours (two crash dumps, exception
+//! 0xE0000008; see tauri-apps/tauri#12724). Pulling also means nothing piles up
+//! while the page is busy, hidden or dead.
 //!
 //! Sharing with a DAW: this is a *shared mode* stream. With Windows' default
 //! setting ("Give exclusive mode applications priority") an app asking for
@@ -24,7 +31,6 @@ use std::time::Duration;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use rustfft::{num_complex::Complex, FftPlanner};
 use serde::Serialize;
-use tauri::{AppHandle, Emitter};
 
 const EMIT_INTERVAL: Duration = Duration::from_millis(16); // ~60 Hz
 const RING: usize = 2048; // FFT size, also the sample history kept per channel
@@ -62,6 +68,13 @@ struct Running {
 
 fn slot() -> &'static Mutex<Option<Running>> {
     static S: OnceLock<Mutex<Option<Running>>> = OnceLock::new();
+    S.get_or_init(|| Mutex::new(None))
+}
+
+/// The most recent frame. Only the newest one matters for a meter, so older
+/// frames are overwritten rather than queued.
+fn latest() -> &'static Mutex<Option<AudioFrame>> {
+    static S: OnceLock<Mutex<Option<AudioFrame>>> = OnceLock::new();
     S.get_or_init(|| Mutex::new(None))
 }
 
@@ -200,7 +213,7 @@ fn set_status(f: impl FnOnce(&mut AudioStatus)) {
     }
 }
 
-fn capture(app: AppHandle, stop: Arc<AtomicBool>) -> Result<(), String> {
+fn capture(stop: Arc<AtomicBool>) -> Result<(), String> {
     let host = cpal::default_host();
     let dev = host
         .default_output_device()
@@ -303,10 +316,15 @@ fn capture(app: AppHandle, stop: Arc<AtomicBool>) -> Result<(), String> {
                 Some(AudioFrame { l, r, bands, wl, wr })
             }
         };
-        let _ = app.emit("audio-level", frame.unwrap_or_else(|| silent.clone()));
+        if let Ok(mut l) = latest().lock() {
+            *l = Some(frame.unwrap_or_else(|| silent.clone()));
+        }
     }
     drop(stream);
     set_status(|s| s.running = false);
+    if let Ok(mut l) = latest().lock() {
+        *l = None;
+    }
     // Release the slot so a later start can try again (e.g. after the DAW quits).
     if let Ok(mut g) = slot().lock() {
         *g = None;
@@ -315,7 +333,7 @@ fn capture(app: AppHandle, stop: Arc<AtomicBool>) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn audio_start(app: AppHandle) -> Result<AudioStatus, String> {
+pub fn audio_start() -> Result<AudioStatus, String> {
     let mut g = slot().lock().map_err(|e| e.to_string())?;
     if g.is_some() {
         return Ok(audio_status());
@@ -323,7 +341,7 @@ pub fn audio_start(app: AppHandle) -> Result<AudioStatus, String> {
     let stop = Arc::new(AtomicBool::new(false));
     let s2 = stop.clone();
     std::thread::spawn(move || {
-        if let Err(e) = capture(app, s2) {
+        if let Err(e) = capture(s2) {
             eprintln!("[audio] {e}");
             set_status(|s| {
                 s.running = false;
@@ -349,6 +367,12 @@ pub fn audio_stop() -> Result<(), String> {
         r.stop.store(true, Ordering::Relaxed);
     }
     Ok(())
+}
+
+/// The latest frame, or `None` while nothing is being captured.
+#[tauri::command]
+pub fn audio_frame() -> Option<AudioFrame> {
+    latest().lock().ok().and_then(|l| l.clone())
 }
 
 #[tauri::command]

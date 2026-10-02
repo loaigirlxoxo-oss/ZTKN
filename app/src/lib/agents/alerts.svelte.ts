@@ -1,4 +1,4 @@
-import { listen } from "@tauri-apps/api/event";
+import { onLive } from "$lib/sensors/livePoll";
 import { invoke } from "@tauri-apps/api/core";
 
 // 承認待ちのエージェントセッション（フックexeが ~/.claude/ztkn-state/ に書き、Rustが集約配信）。
@@ -26,7 +26,8 @@ class AgentAlertStore {
   async start(): Promise<void> {
     if (this.started) return;
     this.started = true;
-    await listen<string>("agent-alerts", (e) => this.ingest(e.payload));
+    // イベントでなく Rust の最新値置き場から取りに行く（sensors/livePoll.ts の説明）。
+    onLive("agent-alerts", (raw) => this.ingest(raw));
     // 起動直後の取り逃し対策に一度即取得
     try {
       this.ingest(await invoke<string>("get_agent_alerts"));
