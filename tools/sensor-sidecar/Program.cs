@@ -5,10 +5,21 @@ using LibreHardwareMonitor.Hardware;
 // 一定間隔(既定0.5秒)で全センサー値を JSON 1行で stdout へ出力するサイドカー。
 // センサー源は LibreHardwareMonitor（CPU温度・GPU・メモリ・ネット等すべてLHMで取得）。
 // Tauri(Rust) が stdout を読みフロントへ転送する。
-// 第1引数=送出間隔ms(100以上、既定500)、第2引数=pc-profile.json のパス(省略可。PC全体の電力推定に使う)。
+// 引数: 送出間隔ms(100以上、既定500) / pc-profile.json のパス(PC全体の電力推定に使う) /
+//       --memory-temps(メモリ温度を読む。SMBus を使う) / --parent <PID>(親が消えたら自分も終わる)
 
-var stdout = new StreamWriter(Console.OpenStandardOutput(), new UTF8Encoding(false)) { AutoFlush = false };
+// Console.OpenStandardOutput() は読み手が居なくなっても書き込みエラーを黙って無視する（.NET の仕様）。
+// それだと ZTKN が落ちてもこのプロセスは気づかずに残り続けるので、標準出力のハンドルを直接開き、
+// 書けなくなったら IOException で終われるようにする。
+var stdout = new StreamWriter(
+    new FileStream(new Microsoft.Win32.SafeHandles.SafeFileHandle(Native.GetStdHandle(-11), ownsHandle: false), FileAccess.Write, 1),
+    new UTF8Encoding(false)) { AutoFlush = false };
 int intervalMs = args.Length > 0 && int.TryParse(args[0], out var ms) && ms >= 100 ? ms : 500;
+string? profilePath = args.FirstOrDefault(a => a.EndsWith(".json", StringComparison.OrdinalIgnoreCase));
+bool memoryTemps = args.Contains("--memory-temps");
+int parentArg = Array.IndexOf(args, "--parent");
+if (parentArg >= 0 && parentArg + 1 < args.Length && int.TryParse(args[parentArg + 1], out var parentPid))
+    WatchParent(parentPid);
 
 // GPU のハンドルはドライバのリセット・TDR・スリープ復帰で無効になることがあり、
 // その後は Update() が成功しても値が 0 のまま返り続ける（実機で発生）。
@@ -19,16 +30,29 @@ int intervalMs = args.Length > 0 && int.TryParse(args[0], out var ms) && ms >= 1
 // 誤って故障と判定し、再初期化を繰り返す。
 var computer = new Computer
 {
-    IsCpuEnabled = true, IsGpuEnabled = true, IsMemoryEnabled = true,
+    // メモリ温度を使わないときは IsMemoryEnabled を切り、SMBus に一切触らない（OsMemory.cs の説明）。
+    IsCpuEnabled = true, IsGpuEnabled = true, IsMemoryEnabled = memoryTemps,
     IsMotherboardEnabled = true, IsStorageEnabled = true, IsNetworkEnabled = true,
     IsControllerEnabled = true, IsBatteryEnabled = true,
 };
 computer.Open();
+// マザーボードのチップ（SuperIO。ファン・電圧・温度）は、ISA バスの共有ミューテックスが取れないと
+// 見つけられず、そのまま諦められる。直前まで動いていたサイドカーや他の監視ツールが持っていると、
+// 起動し直しのたびに見失うことがあった（実機：メモリ温度の切り替え後に Nuvoton の 40 個が消えた）。
+// 見つからなければ数秒おいて探し直す。管理者でなければそもそも読めないので探し直さない。
+if (IsAdministrator())
+    for (int attempt = 1; attempt <= 3 && !HasSuperIo(computer); attempt++)
+    {
+        Console.Error.WriteLine($"[sensor-sidecar] マザーボードのチップが見つからない。探し直す ({attempt}/3)");
+        Thread.Sleep(3000);
+        computer.IsMotherboardEnabled = false;
+        computer.IsMotherboardEnabled = true;
+    }
 var visitor = new UpdateVisitor();
 // NVML は先頭の NVIDIA GPU しか見ないので、NVIDIA が1枚のときだけ推定を使う。
 var gpuEstimator = computer.Hardware.Count(h => h.HardwareType == HardwareType.GpuNvidia) == 1
     ? GpuPowerEstimator.TryCreate() : null;
-var systemEstimator = SystemPowerEstimator.Load(args.Length > 1 ? args[1] : null);
+var systemEstimator = SystemPowerEstimator.Load(profilePath);
 
 while (true)
 {
@@ -49,6 +73,12 @@ while (true)
             if (used.Add(id)) sensors.Add(new SensorDto(id, GpuPowerEstimator.SensorName, hw.Name, "Power", est, "W"));
         }
     }
+    if (!memoryTemps)
+        foreach (var (hw, name, type, value, unit) in OsMemory.Read())
+        {
+            string id = $"{hw}|{name}|{type}";
+            if (used.Add(id)) sensors.Add(new SensorDto(id, name, hw, type, value, unit));
+        }
     // PC 全体（コンセント側）の推定と内訳。内蔵 GPU は CPU Package に含まれるので足さない。
     if (systemEstimator.Estimate(computer.Hardware, dgpuW) is { } parts)
         foreach (var (name, watts) in parts)
@@ -56,10 +86,42 @@ while (true)
             string id = $"PC|{name}|Power";
             if (used.Add(id)) sensors.Add(new SensorDto(id, name, "PC", "Power", watts, "W"));
         }
-    stdout.WriteLine(JsonSerializer.Serialize(new Payload("LHM", sensors)));
-    stdout.Flush();
+    try
+    {
+        stdout.WriteLine(JsonSerializer.Serialize(new Payload("LHM", sensors)));
+        stdout.Flush();
+    }
+    catch (IOException)
+    {
+        break; // 読み手（ZTKN）が居なくなった。取り残されて読み続けないよう終わる
+    }
     Thread.Sleep(intervalMs);
 }
+
+// 親（ZTKN）が終了・クラッシュしたら自分も終わる。これが無いと、ZTKN を起動し直すたびに
+// 取り残されたサイドカーが増え、それぞれが PawnIO を使い続けていた（実機で確認）。
+static void WatchParent(int pid)
+{
+    try
+    {
+        var parent = System.Diagnostics.Process.GetProcessById(pid);
+        var t = new Thread(() => { parent.WaitForExit(); Environment.Exit(0); }) { IsBackground = true };
+        t.Start();
+    }
+    catch (ArgumentException)
+    {
+        Environment.Exit(0); // 起動した時点で親がもう居ない
+    }
+}
+
+static bool HasSuperIo(Computer c) =>
+    c.Hardware.Any(h => h.HardwareType == HardwareType.Motherboard
+                        && h.SubHardware.Any(s => s.HardwareType == HardwareType.SuperIO));
+
+static bool IsAdministrator() =>
+    OperatingSystem.IsWindows()
+    && new System.Security.Principal.WindowsPrincipal(System.Security.Principal.WindowsIdentity.GetCurrent())
+        .IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator);
 
 static void CollectLhm(IHardware hw, List<SensorDto> outList, HashSet<string> usedIds)
 {
@@ -124,4 +186,10 @@ class UpdateVisitor : IVisitor
     }
     public void VisitSensor(ISensor sensor) { }
     public void VisitParameter(IParameter parameter) { }
+}
+
+static class Native
+{
+    [System.Runtime.InteropServices.DllImport("kernel32.dll")]
+    public static extern IntPtr GetStdHandle(int nStdHandle); // -11 = STD_OUTPUT_HANDLE
 }
