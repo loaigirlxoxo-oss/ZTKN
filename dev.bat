@@ -1,7 +1,4 @@
 @echo off
-title ZTKN dev
-cd /d "%~dp0"
-echo Launching ZTKN in developer mode (elevated).
-echo Approve the UAC prompt when it appears...
-echo.
-powershell -NoProfile -ExecutionPolicy Bypass -File "tools\dev-admin.ps1"
+rem Kept for compatibility. dev.vbs starts ZTKN dev with no console window;
+rem a .bat cannot avoid showing this one for a moment.
+start "" wscript.exe "%~dp0dev.vbs"

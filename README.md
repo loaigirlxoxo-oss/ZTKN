@@ -304,7 +304,7 @@ Default テンプレートの「総消費電力」は、PC 全体をコンセン
 
 ## ソースからビルド
 
-**開発起動**: 前提（下記）が揃っていれば、リポジトリ直下の **`dev.bat`** をダブルクリック → UAC 承認で開発モード起動。
+**開発起動**: 前提（下記）が揃っていれば、リポジトリ直下の **`dev.vbs`** をダブルクリック → UAC 承認で開発モード起動。コンソール窓は出ず、ZTKN の窓だけが開きます。出力は `%TEMP%\ztkn-dev.log` に書かれ、起動に失敗したときはメッセージで知らせます（`dev.bat` でも同じですが、一瞬だけ黒い窓が出ます）。
 
 **前提**: Node.js / Rust / .NET 9 SDK
 
@@ -320,7 +320,7 @@ npm install
 #    https://github.com/namazso/PawnIO.Setup/releases から PawnIO_setup.exe を取得し
 #    app/src-tauri/installer-deps/PawnIO_setup.exe に置く
 
-# 4. 開発起動（管理者必須。UAC を承認）※ dev.bat ダブルクリックでも同じ
+# 4. 開発起動（管理者必須。UAC を承認）※ dev.vbs ダブルクリックでも同じ
 ..\tools\dev-admin.ps1
 
 # 5. 配布ビルド（NSIS インストーラを生成）
