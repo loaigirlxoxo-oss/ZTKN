@@ -6,6 +6,7 @@ use tauri::{AppHandle, Emitter, Manager};
 mod aihooks; // Claude/Codex のフック設定の導入・削除
 mod audio; // 出力音声のループバック取り込み(VUメーター用)
 mod live; // 画面が取りに来る最新値（センサー・AI使用量・承認待ち）
+mod webmem; // ページを描くプロセスのメモリ（溜まったら読み込み直すため）
 mod codexapp; // Codex アプリ(フック非対応)の実行中をセッション記録から検出
 mod usage; // AI使用量(プラン残量%・5h/7d枠)の取得
 
@@ -748,7 +749,7 @@ pub fn run() {
             get_claude_usage_event, get_agent_alerts, ai_hooks_status, set_ai_hooks,
             restart_sensor_sidecar,
             audio::audio_start, audio::audio_stop, audio::audio_status, audio::audio_frame,
-            live::get_live, get_sensor_options, set_sensor_options
+            live::get_live, get_sensor_options, set_sensor_options, webmem::renderer_memory_mb
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

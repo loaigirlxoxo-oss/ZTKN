@@ -8,6 +8,10 @@
   import { sensors } from "$lib/sensors/live.svelte";
   import { pickSensor } from "$lib/sensors/match";
   import { createItem, type PanelItem } from "$lib/model/panel";
+  import { restoreAfterReset, startMemoryGuard } from "$lib/editor/memoryGuard";
+
+  // メモリが溜まって読み込み直した直後なら、表示状態とパネルを戻す。見本を並べる判定より前に行う。
+  restoreAfterReset();
 
   onMount(() => {
     // 初回のみサンプルを配置（センサーは実データ到着後に自動割当）
@@ -36,6 +40,7 @@
     }
     sensors.start();
     agentAlerts.start(); // 承認待ち（件数センサー＋AlertList部品用の一覧）
+    startMemoryGuard(); // 画面のメモリが溜まりすぎたら、状態を保ったまま読み込み直す
   });
 </script>
 

@@ -86,6 +86,7 @@ dependencies = [
  "tauri-plugin-opener",
  "toml_edit 0.22.27",
  "ureq",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
