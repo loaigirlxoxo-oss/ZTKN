@@ -255,7 +255,7 @@
       {#if waveCfg(item).design === "vu"}
         <label>種類
           <select value={waveCfg(item).vu.variant}
-                  onchange={(e) => { const v = e.currentTarget.value; editWave(item, (w) => { w.vu.variant = v; }); }}>
+                  onchange={(e) => { const v = e.currentTarget.value; editWave(item, (w) => { w.vu.variant = v; Object.assign(w.vu, VU_VARIANTS[v]?.defaults ?? {}); }); }}>
             {#each VU_LIST as v}<option value={v.id}>{v.label}</option>{/each}
           </select>
         </label>

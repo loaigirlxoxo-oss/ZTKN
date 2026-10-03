@@ -14,7 +14,7 @@
   import { getImage as _gi, loadUrl } from "$lib/render/images";
   import { audio } from "$lib/sensors/audio.svelte";
   import {
-    VU_VARIANTS, VU_DEFAULTS, buildScale, buildCracks, buildGrime, drawVu,
+    VU_VARIANTS, VU_DEFAULTS, buildScale, drawVu,
     Ballistics, rmsToPos, type VuVariant, type VuLayers, type VuSettings,
   } from "$lib/render/vumeter";
   import {
@@ -359,9 +359,9 @@
         const v = VU_VARIANTS[cfg.variant] ?? VU_VARIANTS.ussr;
         const rt: VuRt = { v, cfg, bal: [new Ballistics(), new Ballistics()], release: audio.acquire() };
         vuRt.set(item.id, rt);
-        Promise.all([loadUrl(v.src.bezel), loadUrl(v.src.paper), loadUrl(v.src.glass)])
-          .then(([bezel, paper, glass]) => {
-            rt.layers = { bezel, paper, glass, scale: buildScale(v), cracks: buildCracks(v), grime: buildGrime(v, glass) };
+        Promise.all([v.src.bezel, v.src.paper, v.src.glass, v.src.grime, v.src.crack].map(loadUrl))
+          .then(([bezel, paper, glass, grime, cracks]) => {
+            rt.layers = { bezel, paper, glass, scale: buildScale(v), cracks, grime };
             layer.batchDraw();
           })
           .catch((e) => console.error("[vu] 素材の読み込みに失敗", e));

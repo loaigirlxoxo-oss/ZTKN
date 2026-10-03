@@ -149,7 +149,7 @@ export function createItem(kind: ItemKind, pos: { x: number; y: number }): Panel
     base.wave = {
       design: "bars-solid", scheme: "cyber", smooth: 0.7, glow: 12, trail: 0.55,
       bands: 40, gain: 1, gap: 2, peak: true, bg: false,
-      vu: { variant: "ussr", lamp: 0.55, glass: 0.16, grime: 0.45, cracks: 0.7, shadow: 0.45, weight: 1, refDb: -18, label: true },
+      vu: { variant: "ussr", lamp: 0.55, glass: 0.09, grime: 0.45, cracks: 0.35, shadow: 0.45, weight: 1, refDb: -18, label: true },
     };
   }
   if (kind === "AlertList") { base.rect.w = 300; base.rect.h = 120; base.style.fontSize = 16; base.style.color = "#ff6b6b"; }
